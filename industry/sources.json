@@ -1,0 +1,30 @@
+{
+  "$comment": "示范信源：首次启动时导入（scripts/seed.ts），已存在的不会被覆盖。之后在后台“信源”里新建、修改和暂停。字段说明见 docs/customize.md。",
+  "sources": [
+    {
+      "id": "blcu-xsch-activities",
+      "name": "北京语言大学学生处·活动公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://xsch.blcu.edu.cn/xsc/ldjy1/hdgg.htm",
+        "parseMode": "html",
+        "itemSelector": "li[id^=\"line_u6_\"]",
+        "linkSelector": ".conts h3 a",
+        "titleSelector": ".conts h3 a",
+        "allowUrlPrefixes": ["https://xsch.blcu.edu.cn/info/1061/"],
+        "detail": {
+          "maxFetches": 8,
+          "publishedAtSelector": ".newsContent .info span:first-child",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    }
+  ]
+}
