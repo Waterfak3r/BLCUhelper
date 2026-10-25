@@ -58,7 +58,7 @@ export interface ItemSummary {
 }
 
 /** The fields rendered by a site feed card; full original text lives in the item detail. */
-export interface FeedItemSummary extends Pick<ItemSummary, "id" | "title" | "summary" | "reason" | "source" | "publishedAt" | "timelineAt" | "category" | "tags" | "score" | "selected" | "channel"> {
+export interface FeedItemSummary extends Pick<ItemSummary, "id" | "title" | "summary" | "reason" | "source" | "links" | "publishedAt" | "timelineAt" | "category" | "tags" | "score" | "selected" | "channel"> {
   x: (Pick<XPostView, "authorName" | "handle" | "avatarUrl" | "avatarSrcSet" | "media"> & {
     quoted: Omit<NonNullable<XPostView["quoted"]>, "url"> | null;
   }) | null;
@@ -143,6 +143,8 @@ export interface SiteItemDetail extends ItemSummary {
   author: string | null;
   /** Whitelisted HTML of the language shown; the other one is null. */
   body: { zh: string | null; original: string | null; zhKind: "translation" | "original" | null; complete: boolean } | null;
+  /** Publisher material references, independent of permission to reproduce the article body. */
+  attachments: Array<{ name: string; url: string }>;
   outline: OutlineEntry[];
   relatedStories: StoryRef[];
   /** The topics the report belongs to. */

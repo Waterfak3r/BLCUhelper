@@ -16,6 +16,7 @@ import { onlyXArticleLink, xArticleText } from "../sources/x.ts";
 import { sanitizeBody, trimTrailingChrome } from "./sanitize.ts";
 import { contentHash, fillPublicationTime, reviseMaterial, updatePresentation, type MediaItem } from "./materials.ts";
 import { markdownBody } from "./markdown.ts";
+import { documentAttachments, type Attachment } from "./attachments.ts";
 
 export interface ExtractedBody {
   html: string;
@@ -25,6 +26,12 @@ export interface ExtractedBody {
   /** The page's publication metadata; neither modification time nor dates mentioned in its prose. */
   publishedAt?: Date | null;
   publicationTime?: string | null;
+}
+
+export interface ExtractedPage {
+  body: ExtractedBody | null;
+  /** Null means no complete publisher HTML was observed; an observed empty list clears old links. */
+  attachments: Attachment[] | null;
 }
 
 const MIN_BODY_CHARS = 200;
@@ -66,7 +73,7 @@ export function isSignInRedirect(asked: string, landed: string): boolean {
 }
 
 /** Restore only completed React streaming boundaries, without evaluating any page script. */
-function settleStreamedContent(document: ReturnType<typeof parseHTML>["document"]) {
+export function settleStreamedContent(document: ReturnType<typeof parseHTML>["document"]) {
   for (const script of document.querySelectorAll("script:not([src])")) {
     const type = script.getAttribute("type")?.toLowerCase();
     if (type && type !== "text/javascript" && type !== "application/javascript") continue;
@@ -417,29 +424,35 @@ export function readableDocument(document: Doc, url: string, rules: PageRules = 
   return { html: clean, text, images, via: "readability", ...date };
 }
 
-export async function extractFromUrl(url: string, subject: string, rules: PageRules = {}, opts: { paidFallback?: boolean } = {}): Promise<ExtractedBody | null> {
+export async function extractFromUrl(url: string, subject: string, rules: PageRules = {}, opts: { paidFallback?: boolean } = {}): Promise<ExtractedPage | null> {
   if (isVideoPageUrl(url)) return null;
+  let observed: ExtractedPage | null = null;
   try {
     const res = await guardedFetch(url, { headers: languageHeaders(rules.acceptLanguage), timeoutMs: 20_000, maxBytes: 6 * 1024 * 1024 });
     if (isVideoPageUrl(res.url)) return null;
     if (isSignInRedirect(url, res.url)) return null;
     const type = res.headers.get("content-type") ?? "";
     if (res.status === 200 && /html/.test(type)) {
-      const got = readable(res.text(), res.url, rules);
-      if (got) return got;
+      const document = contentDocument(res.text());
+      settleStreamedContent(document);
+      const attachments = documentAttachments(document, res.url);
+      observed = { body: null, attachments };
+      const body = readableDocument(document, res.url, rules);
+      observed.body = body;
+      if (body) return observed;
     }
   } catch {
     // fall through to Jina
   }
-  if (opts.paidFallback === false) return null;
+  if (opts.paidFallback === false) return observed;
   try {
     const page = await jinaRead(url, { purpose: "body_fallback", subject });
     const html = markdownBody(page.markdown, url);
     const text = stripTags(html);
-    if (text.length < MIN_BODY_CHARS) return null;
-    return { html, text, images: [], via: "jina" };
+    if (text.length < MIN_BODY_CHARS) return observed;
+    return { body: { html, text, images: [], via: "jina" }, attachments: observed?.attachments ?? null };
   } catch (error) {
-    if (error instanceof BudgetExceededError || error instanceof UnavailablePageError) return null;
+    if (error instanceof BudgetExceededError || error instanceof UnavailablePageError) return observed;
     throw error;
   }
 }
@@ -457,21 +470,35 @@ export function pageFetchable(url: string, sourceKind: string): boolean {
 
 /** Fetches and stores the body of one article. Unconfirmed bodies are recorded as such. */
 export async function extractArticleBody(articleId: string): Promise<"ok" | "unconfirmed" | "skipped"> {
-  const [a] = await sql<{ id: string; url: string; body_status: string; revision: number; x_post: { tweetId?: string } | null; config: SourceRow["config"] }[]>`
-    SELECT a.id, a.url, a.body_status, a.revision, a.x_post, s.config
+  // References can change without a semantic revision. Snapshot their canonical JSON text
+  // before I/O; SQL NULL (absent) remains distinct from the JSON value null.
+  const [a] = await sql<{ id: string; source_id: string; url: string; body_status: string; revision: number; attachments_snapshot: string | null; x_post: { tweetId?: string } | null; config: SourceRow["config"] }[]>`
+    SELECT a.id, a.source_id, a.url, a.body_status, a.revision, (a.raw->'attachments')::text AS attachments_snapshot, a.x_post, s.config
     FROM articles a JOIN sources s ON s.id = a.source_id WHERE a.id = ${articleId}`;
   if (!a || a.body_status === "ok") return "skipped";
   if (a.x_post?.tweetId) return extractXArticle(a.id, a.x_post.tweetId, a.revision);
-  const got = await extractFromUrl(a.url, `article:${a.id}`, pageRules(a.config));
+  const page = await extractFromUrl(a.url, `article:${a.id}`, pageRules(a.config));
+  const got = page?.body;
   if (!got) {
-    return markUnconfirmed(articleId, a.revision);
+    return sql.begin(async tx => {
+      const [row] = await tx`SELECT id FROM articles WHERE id=${articleId} AND source_id=${a.source_id} AND revision=${a.revision} AND body_status <> 'ok' FOR UPDATE`;
+      if (!row) return "skipped";
+      if (page?.attachments !== null && page?.attachments !== undefined) await tx`UPDATE articles SET raw =
+        (CASE WHEN jsonb_typeof(raw)='object' THEN raw ELSE '{}'::jsonb END) || ${tx.json({ attachments: page.attachments })}::jsonb
+        WHERE id=${articleId} AND (raw->'attachments')::text IS NOT DISTINCT FROM ${a.attachments_snapshot}`;
+      const rows = await tx`UPDATE articles SET body_status='unconfirmed',updated_at=now() WHERE id=${articleId} RETURNING id`;
+      return rows.length ? "unconfirmed" : "skipped";
+    });
   }
   // The body is new content: a new revision, so an analysis of the body-less input counts as stale.
   return sql.begin(async (tx) => {
     const [row] = await tx<{ title: string; excerpt: string | null; content_hash: string | null; media: MediaItem[] }[]>`
       SELECT title, excerpt, content_hash, media FROM articles
-      WHERE id = ${articleId} AND revision = ${a.revision} AND body_status <> 'ok' FOR UPDATE`;
+      WHERE id = ${articleId} AND source_id=${a.source_id} AND revision = ${a.revision} AND body_status <> 'ok' FOR UPDATE`;
     if (!row) return "skipped";
+    if (page && page.attachments !== null) await tx`UPDATE articles SET raw =
+      (CASE WHEN jsonb_typeof(raw)='object' THEN raw ELSE '{}'::jsonb END) || ${tx.json({ attachments: page.attachments })}::jsonb
+      WHERE id=${articleId} AND (raw->'attachments')::text IS NOT DISTINCT FROM ${a.attachments_snapshot}`;
     const time = a.config.detail?.publishedAtAuthoritative === true ? null : await fillPublicationTime(tx, articleId, got.publishedAt, undefined, got.publicationTime);
     const hash = contentHash({ title: row.title, bodyText: got.text, excerpt: row.excerpt });
     if (!time && hash === row.content_hash) {

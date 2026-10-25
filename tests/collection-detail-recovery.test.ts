@@ -29,6 +29,10 @@ const server = http.createServer((req, res) => {
   res.setHeader("content-type", "text/html");
   // A long paper with inline figures: larger than any response limit, its byline at the top.
   const figures = path.includes("oversized") ? `<p>${"figure ".repeat(1_500_000)}</p>` : "";
+  if (path.includes("attachment-only")) {
+    res.end(`<html><body><h1>Verified title ${path}</h1><time datetime="${date}"></time><div id="vsb_content"><table><tr><td><a href="https://official.example/application.docx?token=A%2FB">申请表</a></td></tr></table></div><ul class="attachments"><li><a href="https://official.example/checklist.pdf">材料清单</a></li></ul></body></html>`);
+    return;
+  }
   res.end(`<html><body><article><h1>Verified title ${path}</h1>${path.includes("undated") ? "" : `<time datetime="${date}"></time>`}<p>${"Verified original article body. ".repeat(50)}</p>${figures}</article></body></html>`);
 });
 await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -136,4 +140,19 @@ test('recoverable errors at the front cannot consume every later detail budget',
     await collectSource(id);
     assert.equal((await rows(id)).filter(r => r.published_at).length, 3, 'the failed entry still recovers');
   }
+});
+
+test("collection persists short detail materials without passing their link labels off as complete bodies", async () => {
+  const id = await source("attachment-only");
+  await collectSource(id);
+  const [observed] = await sql`SELECT raw,body_status,body_text,body_html FROM articles WHERE source_id=${id} AND published_at IS NOT NULL`;
+  assert.deepEqual(observed!.raw.attachments, [
+    { name: "申请表", url: "https://official.example/application.docx?token=A%2FB" },
+    { name: "材料清单", url: "https://official.example/checklist.pdf" },
+  ]);
+  assert.notEqual(observed!.body_status, "ok");
+  assert.equal(observed!.body_text, null);
+  assert.equal(observed!.body_html, null);
+  await collectSource(id);
+  assert.deepEqual((await sql`SELECT raw FROM articles WHERE source_id=${id} AND url LIKE '%-0'`)[0]!.raw.attachments, observed!.raw.attachments);
 });

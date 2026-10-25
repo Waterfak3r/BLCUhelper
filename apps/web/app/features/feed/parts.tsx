@@ -10,17 +10,17 @@ import { toggleStar, useIsStarred } from "../../lib/local-state";
 /** The text colour of a report: grey once this browser has opened it, so the unread ones stand out. */
 export const readTone = (read: boolean, unread: string) => (read ? "text-ink-4" : unread);
 
-export function SourceLine({ item, className = "" }: { item: Pick<FeedItemSummary, "source" | "x" | "channel">; className?: string }) {
+export function SourceLine({ item, className = "" }: { item: Pick<FeedItemSummary, "source" | "x" | "channel" | "links">; className?: string }) {
   if (item.channel === "x" && item.x) {
     return (
-      <span className={`flex min-w-0 items-center gap-1.5 ${className}`}>
+      <a href={item.links.original} target="_blank" rel="noopener noreferrer" className={`relative z-10 flex min-w-0 items-center gap-1.5 hover:text-accent ${className}`}>
         <SourceAvatar name={item.x.authorName} avatarUrl={item.x.avatarUrl} avatarSrcSet={item.x.avatarSrcSet} size={16} />
         <span className="truncate text-ink-3">{item.x.authorName}</span>
         <span className="hidden shrink-0 text-ink-4 min-[400px]:inline">@{item.x.handle}</span>
-      </span>
+      </a>
     );
   }
-  return <span className={`min-w-0 truncate ${className}`}>{item.source.name}</span>;
+  return <a href={item.links.original} target="_blank" rel="noopener noreferrer" className={`relative z-10 min-w-0 truncate hover:text-accent ${className}`}>{item.source.name}</a>;
 }
 
 /** Up to four media thumbnails, kept small in lists (the detail page shows them larger). Videos are stills. */

@@ -235,3 +235,24 @@ test("rereading an exact midnight upgrades day precision without a new revision"
   assert.equal(row!.publication_time, "2026-10-13T07:00:00.000Z");
   assert.equal(row!.revision, 1);
 });
+
+test("observed attachments replace only their own source metadata without revising semantic input", async () => {
+  const input = { sourceId: SOURCE, url: `https://example.com/attachments-${tag()}`, title: "Short notice", via: "fetch" as const };
+  const first = [{ name: "申请表", url: "https://files.example/form.docx?token=Keep%2FMe" }];
+  const second = [{ name: "清单", url: "https://official.example/list.pdf" }];
+  const { articleId } = await upsertMaterial({ ...input, raw: { attachments: first, unrelated: "keep" } });
+  await sql`UPDATE articles SET processing_state='analyzed' WHERE id=${articleId}`;
+  const before = await state(articleId);
+  const saved = async () => (await sql`SELECT raw FROM articles WHERE id=${articleId}`)[0]!.raw;
+  await upsertMaterial(input);
+  assert.deepEqual((await saved()).attachments, first, "a listing without a detail read retains links");
+  await upsertMaterial({ ...input, raw: { attachments: second } });
+  assert.deepEqual(await saved(), { attachments: second, unrelated: "keep" });
+  await upsertMaterial({ ...input, sourceId: OTHER, raw: { attachments: first } });
+  assert.deepEqual((await saved()).attachments, second, "another source cannot replace publisher references");
+  await upsertMaterial({ ...input, raw: { attachments: [] } });
+  assert.deepEqual((await saved()).attachments, [], "an observed empty page clears obsolete links");
+  await upsertMaterial(input);
+  assert.deepEqual((await saved()).attachments, []);
+  assert.deepEqual(await state(articleId), before, "reference updates do not restart paid processing");
+});

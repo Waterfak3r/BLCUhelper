@@ -87,7 +87,11 @@ function Source({ c, size = 16 }: { c: ReportCitation; size?: number }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5">
       <SourceAvatar name={c.sourceName} iconUrl={c.sourceIconUrl} iconSrcSet={c.sourceIconSrcSet} size={size} />
-      <span className="truncate">{c.sourceName}</span>
+      {c.available ? (
+        <a href={c.sourceUrl} target="_blank" rel="noopener noreferrer" className="truncate transition-colors hover:text-accent">{c.sourceName}</a>
+      ) : (
+        <span className="truncate">{c.sourceName}</span>
+      )}
       {c.firstParty && <Badge tone="accent">一手</Badge>}
     </span>
   );
@@ -123,7 +127,7 @@ function Related({ items, className = "" }: { items: ReportCitation[]; className
             ) : (
               <span title={WITHDRAWN_NOTE} className="text-ink-4 line-through">{r.title}</span>
             )}
-            {r.available && <span className="ml-2 text-[12px] text-ink-4">{r.sourceName}</span>}
+            {r.available && <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-[12px] text-ink-4 transition-colors hover:text-accent">{r.sourceName}</a>}
           </span>
         </li>
       ))}
@@ -335,14 +339,12 @@ function FrontPage({ report, pages, leadStory, count }: { report: ReportDetail; 
                   );
                 }
                 return (
-                  <li key={keyOf(h)}>
-                    <Link to={to} viewTransition={to.startsWith("/")} className="group flex gap-3.5 border-b border-line py-4">
-                      <span className="num w-6 shrink-0 text-[26px] font-black leading-[0.95] tracking-[-0.03em] text-accent">{i + 1}</span>
-                      <span className="min-w-0">
-                        <span className="block text-[15px] font-bold leading-[1.55] text-ink transition-colors group-hover:text-accent">{h.title}</span>
-                        <span className="mt-1.5 block truncate text-[12px] text-ink-4">{h.sourceName}</span>
-                      </span>
-                    </Link>
+                  <li key={keyOf(h)} className="flex gap-3.5 border-b border-line py-4">
+                    <span className="num w-6 shrink-0 text-[26px] font-black leading-[0.95] tracking-[-0.03em] text-accent">{i + 1}</span>
+                    <div className="min-w-0">
+                      <Link to={to} viewTransition={to.startsWith("/")} className="block text-[15px] font-bold leading-[1.55] text-ink transition-colors hover:text-accent">{h.title}</Link>
+                      <a href={h.sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-1.5 block truncate text-[12px] text-ink-4 transition-colors hover:text-accent">{h.sourceName}</a>
+                    </div>
                   </li>
                 );
               })}
@@ -516,7 +518,7 @@ export function ReportPaper({ report, index }: { report: ReportDetail; index: Re
                   ) : (
                     <span className="text-ink">{f.title}</span>
                   )}
-                  {f.available && <span className="ml-2 text-[12px] text-ink-4">{f.sourceName}</span>}
+                  {f.available && <a href={f.sourceUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-[12px] text-ink-4 transition-colors hover:text-accent">{f.sourceName}</a>}
                   {f.available && f.followUp && <Badge className="ml-2 align-[1px]" title={`${monthDay(f.followUp)}的日报报道过这件事，这里是新进展`}>跟进</Badge>}
                 </span>
               </li>

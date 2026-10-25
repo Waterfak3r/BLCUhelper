@@ -12,6 +12,7 @@ import { itemUrl, siteUrl } from "./links.ts";
 import { hasItemPage, publicSourceName } from "./rules.ts";
 import { topicLinks, topicMembership } from "./topics.ts";
 
+import { htmlAttachments, safeAttachments } from "../content/attachments.ts";
 interface DetailRow extends ItemRow {
   body_html: string | null;
   body_text: string | null;
@@ -19,6 +20,7 @@ interface DetailRow extends ItemRow {
   tr_html: string | null;
   tr_complete: boolean | null;
   topics: string[];
+  attachments: unknown;
 }
 
 export type DetailResult =
@@ -41,7 +43,7 @@ function withOutline(html: string): { html: string; outline: OutlineEntry[] } {
 
 async function loadRow(id: string): Promise<DetailRow | null> {
   const [row] = await sql<DetailRow[]>`
-    SELECT ${ITEM_COLUMNS}, a.body_html, a.body_text, a.body_status, tr.body_html AS tr_html, tr.complete AS tr_complete,
+    SELECT ${ITEM_COLUMNS}, a.body_html, a.body_text, a.body_status, a.raw->'attachments' AS attachments, tr.body_html AS tr_html, tr.complete AS tr_complete,
       ${topicMembership()} AS topics
     ${ITEM_FROM}
     WHERE p.article_id = ${id}`;
@@ -94,6 +96,7 @@ export async function loadItemDetail(id: string, language: "zh" | "original" = "
       readingMode: "summary-only",
       author: null,
       body: null,
+      attachments: [],
       outline: [],
       relatedStories: [],
       topics: [],
@@ -155,6 +158,7 @@ export async function loadItemDetail(id: string, language: "zh" | "original" = "
     readingMode: "full",
     author: row.author,
     body: reading.body,
+    attachments: materialAttachments(row),
     outline: reading.outline,
     relatedStories: related,
     topics: topicLinks(row.topics),
@@ -165,6 +169,13 @@ export async function loadItemDetail(id: string, language: "zh" | "original" = "
     bodyLanguage: reading.bodyLanguage,
   };
   return { kind: "found", item, row };
+}
+
+/** An explicit observed [] wins over legacy body markup; never expose raw payloads. */
+function materialAttachments(row: DetailRow) {
+  return row.attachments !== null && row.attachments !== undefined
+    ? safeAttachments(row.attachments, row.url)
+    : htmlAttachments(row.body_html ?? textToHtml(row.body_text ?? ""), row.url, true);
 }
 
 /**
@@ -189,6 +200,15 @@ export async function exportMarkdown(id: string): Promise<{ filename: string; bo
   lines.push(row.published_at ? `- 发布时间：${row.published_at.toISOString()}` : `- 收录时间：${row.discovered_at.toISOString()}`);
   lines.push(`- ${SITE.name}：${itemUrl(row.id)}`);
   lines.push(`- 原文：${row.url}`, "");
+  const attachments = materialAttachments(row);
+  if (attachments.length) {
+    lines.push("## 附件", "");
+    for (const attachment of attachments) {
+      const name = attachment.name.replace(/[\\`*_[\]<>]/g, "\\$&");
+      lines.push(`- [${name}](<${attachment.url.replace(/</g, "%3C").replace(/>/g, "%3E")}>)`);
+    }
+    lines.push("");
+  }
   if (row.summary) lines.push("## 摘要", "", row.summary, "");
   if (row.selected && row.seat && row.reason) lines.push(`## ${ITEM_COPY.reasonLabel}`, "", row.reason, "");
   if (showsPost(row) && row.x_post) {

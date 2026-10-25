@@ -130,7 +130,7 @@ export function GroupSources({ group, filters, parentId }: { group: GroupInfo; f
         <ul className="divide-y divide-line-soft">
           {others.map((r) => (
             <li key={r.id} className="flex items-baseline gap-2 py-1.5 text-[13px]">
-              <span className="w-[108px] shrink-0 truncate text-ink-4">{r.source.name}</span>
+              <a href={r.originalUrl} target="_blank" rel="noopener noreferrer" className="w-[108px] shrink-0 truncate text-ink-4 hover:text-accent">{r.source.name}</a>
               <Link viewTransition to={`/items/${r.id}`} className={`min-w-0 flex-1 truncate hover:text-accent ${readTone(read.has(r.id), "text-ink-2")}`}>
                 {r.title}
               </Link>
@@ -191,12 +191,13 @@ function GroupSheet({ open, onClose, group, filters, parentId }: {
         <ul className="divide-y divide-line-soft">
           {others.map((r) => (
             <li key={r.id} className="flex items-start gap-2 py-3">
-              <Link viewTransition to={`/items/${r.id}`} className="min-w-0 flex-1 active:opacity-60">
-                <span className="block text-[12.5px] text-ink-4">
-                  {r.source.name} · <span className="num">{monthDayTime(r.timelineAt)}</span>
-                </span>
-                <span className={`mt-0.5 line-clamp-2 text-[15px] leading-[1.5] ${readTone(read.has(r.id), "text-ink-2")}`}>{r.title}</span>
-              </Link>
+              <div className="min-w-0 flex-1">
+                <div className="text-[12.5px] text-ink-4">
+                  <a href={r.originalUrl} target="_blank" rel="noopener noreferrer" className="hover:text-accent">{r.source.name}</a>
+                  {" · "}<span className="num">{monthDayTime(r.timelineAt)}</span>
+                </div>
+                <Link viewTransition to={`/items/${r.id}`} className={`mt-0.5 line-clamp-2 text-[15px] leading-[1.5] active:opacity-60 ${readTone(read.has(r.id), "text-ink-2")}`}>{r.title}</Link>
+              </div>
               <a href={r.originalUrl} target="_blank" rel="noopener noreferrer" aria-label="打开原文" className="-mr-2 grid size-11 shrink-0 place-items-center rounded-full text-ink-4 active:bg-bg-sunk">
                 <IconArrowUpRight size={16} />
               </a>

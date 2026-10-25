@@ -17,15 +17,15 @@ export const FIXTURE_AT = "2026-10-04T08:00:00.000Z";
 export function feedItem(fields: Partial<FeedItemSummary> & Pick<FeedItemSummary, "id" | "title">): FeedItemSummary {
   return {
     summary: "固定摘要", reason: "固定推荐理由", source: { name: "Fixture" }, publishedAt: FIXTURE_AT, timelineAt: FIXTURE_AT,
-    category: "academic", tags: [], score: 80, selected: true, channel: "news", x: null, ...fields,
+    category: "academic", tags: [], score: 80, selected: true, channel: "news", x: null, links: { original: "https://example.org/article" }, ...fields,
   };
 }
 
 /** A report as its article page shows it; the fields a test does not name are fixed. */
 export function itemDetail(fields: Partial<SiteItemDetail> & Pick<SiteItemDetail, "id" | "title">): SiteItemDetail {
   return {
-    ...feedItem({ id: fields.id, title: fields.title }), x: null, originalTitle: null, links: { original: "https://example.org/article" },
-    discoveredAt: FIXTURE_AT, story: null, readingMode: "full", author: null,
+    ...feedItem({ id: fields.id, title: fields.title }), x: null, originalTitle: null,
+    discoveredAt: FIXTURE_AT, story: null, readingMode: "full", author: null, attachments: [],
     body: { zh: "<p>固定正文</p>", original: null, zhKind: "translation", complete: true },
     outline: [], relatedStories: [], topics: [], indexable: true, markdownAvailable: true, group: null, hasTranslation: true, bodyLanguage: "zh",
     ...fields,

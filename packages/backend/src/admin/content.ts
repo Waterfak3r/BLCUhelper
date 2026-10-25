@@ -20,6 +20,7 @@ import { PresentationMismatch, presentationCounts, rebaseTranslation } from "../
 import { fetchRss } from "../sources/rss.ts";
 import { listingEntries, loadSource } from "../sources/collect.ts";
 import type { SourceRow } from "../sources/types.ts";
+import { htmlAttachments, type Attachment } from "../content/attachments.ts";
 import { computeHotRanking, storedHotRanking } from "../events/hot.ts";
 import { audit, auditHistory, Conflict } from "../audit.ts";
 import { sha256, stableJson } from "../lib/ids.ts";
@@ -360,9 +361,9 @@ export async function rerun(id: string, step: AdminRerun["step"], requestId: str
 
 async function presentationSnapshot(id: string, db: Db = sql, lock = false) {
   const [a] = await db<{ revision: number; title: string; body_text: string | null; excerpt: string | null; body_html: string | null; media: MediaItem[];
-    source_id: string; identity_key: string; url: string; kind: string; config: SourceRow["config"]; tr_html: string | null; tr_origin: string | null }[]>`
+    source_id: string; identity_key: string; url: string; kind: string; config: SourceRow["config"]; tr_html: string | null; tr_origin: string | null; attachments: unknown }[]>`
     SELECT a.revision,a.title,a.body_text,a.excerpt,a.body_html,a.media,a.source_id,a.identity_key,a.url,s.kind,s.config,
-      tr.body_html AS tr_html,tr.origin AS tr_origin
+      tr.body_html AS tr_html,tr.origin AS tr_origin,a.raw->'attachments' AS attachments
     FROM articles a JOIN sources s ON s.id=a.source_id
     LEFT JOIN translations tr ON tr.article_id=a.id AND tr.lang='zh' AND tr.revision=a.revision
     WHERE a.id=${id} ${lock ? sql`FOR UPDATE OF a` : sql``}`;
@@ -382,16 +383,21 @@ async function refreshPresentation(id: string, options: Pick<AdminRerun, "previe
   if (!a) return null;
   // A feed can publish different wording from its web page. Refresh the same source material first.
   let got: { html: string; text: string; images: MediaItem[] } | null = null;
+  let attachments: Attachment[] | null = null;
   if (a.kind === "rss" && a.config.feedUrl) {
     const source = (await loadSource(a.source_id))!;
     const entries = await listingEntries(source, (await fetchRss(source, { force: true })).candidates);
     const entry = entries.find(c => c.identityKey === a.identity_key);
-    if (entry?.bodyHtml && entry.bodyText) got = { html: entry.bodyHtml, text: entry.bodyText, images: entry.media ?? [] };
+    if (entry?.bodyHtml && entry.bodyText) {
+      got = { html: entry.bodyHtml, text: entry.bodyText, images: entry.media ?? [] };
+      attachments = htmlAttachments(entry.bodyHtml, a.url, true);
+    }
   }
   if (!got && pageFetchable(a.url, a.kind)) {
     const page = await extractFromUrl(a.url, `article:${id}`, pageRules(a.config), { paidFallback: false });
     // Match normal extraction: the publisher's existing cover has precedence over body images.
-    if (page) got = { ...page, images: a.media.length ? a.media : page.images };
+    attachments = page?.attachments ?? null;
+    if (page?.body) got = { ...page.body, images: a.media.length ? a.media : page.body.images };
   }
   const before = presentationCounts(a.body_html), after = presentationCounts(got?.html ?? a.body_html);
   let reason = !got ? "当前原文未能直接抽取，请使用正常正文抽取处理" :
@@ -406,9 +412,10 @@ async function refreshPresentation(id: string, options: Pick<AdminRerun, "previe
       translation = "blocked";
     }
   }
-  const version = sha256(stableJson({ before: a, html: got?.html, media: got?.images }));
+  const version = sha256(stableJson({ before: a, html: got?.html, media: got?.images, attachments }));
   const result: AdminPresentationRefresh = { revision: a.revision, version, ready: reason === null, applied: false,
-    changed: !!got && (got.html !== a.body_html || stableJson(got.images) !== stableJson(a.media)), reason,
+    changed: !!got && (got.html !== a.body_html || stableJson(got.images) !== stableJson(a.media)
+      || attachments !== null && stableJson(attachments) !== stableJson(a.attachments)), reason,
     images: { before: before.images, after: after.images }, links: { before: before.links, after: after.links }, translation };
   if (input.preview) return result;
   if (input.version !== version) throw new Conflict("正文或原网页在预览后变化，请重新预览");
@@ -420,6 +427,8 @@ async function refreshPresentation(id: string, options: Pick<AdminRerun, "previe
     if (prior) return prior.after.result;
     if (stableJson(current) !== stableJson(a)) throw new Conflict("材料在预览后变化，请重新预览");
     await updatePresentation(tx, id, { html: got.html, media: got.images });
+    if (attachments !== null) await tx`UPDATE articles SET raw =
+      (CASE WHEN jsonb_typeof(raw)='object' THEN raw ELSE '{}'::jsonb END) || ${tx.json({ attachments })}::jsonb WHERE id=${id}`;
     const applied = { ...result, applied: true };
     await audit(actor, "content.rerun.presentation", `content:${id}`, "仅刷新正文展示",
       { revision: a.revision, bodyHtml: a.body_html, media: a.media, translationHtml: a.tr_html },

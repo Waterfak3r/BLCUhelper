@@ -25,6 +25,7 @@ const page = http.createServer(async (_req, res) => {
   }
   if (--hold.count === 0) hold.entered.open();
   await hold.release.promise;
+  if (hold.failed) { res.writeHead(503); res.end("Unavailable"); return; }
   res.writeHead(200, { "content-type": "text/html" });
   res.end(hold.empty ? "<html><body>Empty</body></html>" : `<html><head><title>Original</title></head><body><article><h1>Original</h1>${presentationHtml ?? `<p>${body}</p>`}</article></body></html>`);
 });
@@ -165,3 +166,86 @@ test("an obsolete extraction failure cannot penalize a newer complete report", a
   const [row] = await sql`SELECT body_status,processing_attempts,processing_error,processing_retry_at FROM articles WHERE id=${articleId}`;
   assert.deepEqual({ ...row }, { body_status: "ok", processing_attempts: 0, processing_error: null, processing_retry_at: null });
 });
+
+test("attachment-only extraction persists links without confirming or revising an incomplete body", async () => {
+  reset(); hold.release.open();
+  const attachments = [{ name: "申请表", url: "https://official.example/form.docx?signature=A%2FB" }];
+  presentationHtml = `<table><tr><td><a href="${attachments[0]!.url}">申请表</a></td></tr></table>`;
+  const input = { sourceId, url: `${base}/${tag()}`, title: "Short notice", via: "fetch" as const };
+  const { articleId } = await upsertMaterial(input);
+  assert.equal(await extractArticleBody(articleId), "unconfirmed");
+  const [row] = await sql`SELECT revision,body_text,body_html,body_status,raw FROM articles WHERE id=${articleId}`;
+  assert.equal(row!.revision, 1);
+  assert.equal(row!.body_text, null);
+  assert.equal(row!.body_html, null);
+  assert.equal(row!.body_status, "unconfirmed");
+  assert.deepEqual(row!.raw.attachments, attachments);
+  reset(); hold.release.open();
+  presentationHtml = "<p>本通知没有附件。</p>";
+  assert.equal(await extractArticleBody(articleId), "unconfirmed");
+  assert.deepEqual((await sql`SELECT raw FROM articles WHERE id=${articleId}`)[0]!.raw.attachments, []);
+});
+
+test("a failed page read preserves previous material references", async () => {
+  reset(); hold.release.open(); hold.failed = true;
+  const attachments = [{ name: "Existing material", url: "https://official.example/existing.pdf" }];
+  const { articleId } = await upsertMaterial({ sourceId, url: `${base}/${tag()}`, title: "Needs another read", via: "fetch", raw: { attachments } });
+  assert.equal(await extractArticleBody(articleId), "unconfirmed");
+  assert.deepEqual((await sql`SELECT raw FROM articles WHERE id=${articleId}`)[0]!.raw.attachments, attachments);
+});
+
+test("administrative presentation reextraction persists the reviewed publisher references", async () => {
+  reset(); hold.release.open();
+  const { articleId } = await upsertMaterial({ sourceId, url: `${base}/${tag()}`, title: "Original", via: "fetch" });
+  await extractArticleBody(articleId);
+  const before = await state(articleId);
+  presentationHtml = `<p><a href="https://official.example/material.docx?signature=Keep%2FMe">This</a>${body.slice(4)}</p>`;
+  const preview = await rerun(articleId, "presentation", "preview-material-links", "test", { preview: true });
+  assert.equal(preview?.ready, true);
+  await rerun(articleId, "presentation", "apply-material-links", "test", { version: preview!.version });
+  assert.deepEqual((await sql`SELECT raw FROM articles WHERE id=${articleId}`)[0]!.raw.attachments,
+    [{ name: "This", url: "https://official.example/material.docx?signature=Keep%2FMe" }]);
+  assert.deepEqual(await state(articleId), before);
+});
+
+test("a stale attachment-only response cannot overwrite the corrected revision's material references", async () => {
+  reset();
+  presentationHtml = '<p><a href="https://official.example/old.pdf">Old form</a></p>';
+  const input = { sourceId, url: `${base}/${tag()}`, title: "Original", via: "fetch" as const };
+  const { articleId } = await upsertMaterial(input);
+  const pending = extractArticleBody(articleId);
+  await hold.entered.promise;
+  const attachments = [{ name: "Corrected form", url: "https://official.example/corrected.pdf" }];
+  try { await upsertMaterial({ ...input, title: "Corrected notice", raw: { attachments } }); }
+  finally { hold.release.open(); }
+  assert.equal(await pending, "skipped");
+  const [row] = await sql`SELECT revision,body_status,raw FROM articles WHERE id=${articleId}`;
+  assert.equal(row!.revision, 2);
+  assert.equal(row!.body_status, "pending");
+  assert.deepEqual(row!.raw.attachments, attachments);
+});
+
+for (const hasBody of [false, true]) for (const initial of ["absent", "null", "list"] as const) for (const clear of [false, true]) {
+  test(`in-flight ${hasBody ? "body" : "attachment-only"} extraction preserves newer ${clear ? "empty" : "replacement"} references over ${initial} metadata`, async () => {
+    reset();
+    presentationHtml = `${hasBody ? `<p>${body}</p>` : ""}<p><a href="https://official.example/outdated.pdf">Outdated form</a></p>`;
+    const input = { sourceId, url: `${base}/${tag()}`, title: "Original", via: "fetch" as const };
+    const raw = initial === "absent" ? undefined : { attachments: initial === "null" ? null : [{ name: "Previous form", url: "https://official.example/previous.pdf" }] };
+    const { articleId } = await upsertMaterial({ ...input, raw });
+    const pending = extractArticleBody(articleId);
+    await hold.entered.promise;
+    const attachments = clear ? [] : [{ name: "Current form", url: "https://official.example/current.pdf" }];
+    try {
+      const result = await upsertMaterial({ ...input, raw: { attachments } });
+      assert.equal(result.revised, false, "a reference update does not create semantic work");
+      assert.equal((await state(articleId)).revision, 1);
+    } finally { hold.release.open(); }
+    assert.equal(await pending, hasBody ? "ok" : "unconfirmed", "the independent body result may still be stored");
+    const [row] = await sql`SELECT revision,body_status,body_text,raw FROM articles WHERE id=${articleId}`;
+    assert.deepEqual(row!.raw.attachments, attachments);
+    assert.equal(row!.revision, hasBody ? 2 : 1);
+    assert.equal(row!.body_status, hasBody ? "ok" : "unconfirmed");
+    if (hasBody) assert.ok(row!.body_text.includes(body.trim()));
+    else assert.equal(row!.body_text, null);
+  });
+}

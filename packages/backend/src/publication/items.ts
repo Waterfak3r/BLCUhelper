@@ -177,7 +177,7 @@ export function toFeedItemSummary(row: ItemRow): FeedItemSummary {
   const x = showsPost(row) ? xView(row, true) : null;
   return {
     id: item.id, title: item.title, summary: item.summary ?? (x?.text || null), reason: item.reason,
-    source: item.source, publishedAt: item.publishedAt, timelineAt: item.timelineAt,
+    source: item.source, links: item.links, publishedAt: item.publishedAt, timelineAt: item.timelineAt,
     category: item.category, tags: item.tags, score: item.score, selected: item.selected, channel: item.channel,
     x: x ? {
       authorName: x.authorName, handle: x.handle, avatarUrl: x.avatarUrl,
