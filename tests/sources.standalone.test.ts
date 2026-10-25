@@ -12,6 +12,7 @@ import { after, test } from "node:test";
 import { config } from "@aihot/backend/config";
 import { extractFromUrl, pageRules } from "@aihot/backend/content/extract";
 import { sanitizeBody, trimTrailingChrome } from "@aihot/backend/content/sanitize";
+import { htmlAttachments, safeAttachments } from "@aihot/backend/content/attachments";
 import { unsupportedConfig } from "@aihot/backend/sources/config-keys";
 import { fetchDetail, fetchWebList, fromHtml, fromMarkdown } from "@aihot/backend/sources/web-list";
 import { fetchRss } from "@aihot/backend/sources/rss";
@@ -260,7 +261,7 @@ test("a source's language reaches its listing, detail page and article body, whi
   const detail = await fetchDetail(item!.url, web, { date: true, title: false, summary: false, body: true });
   assert.match(detail.body?.text ?? "", /^Agents now finish/);
   const body = await extractFromUrl(item!.url, "article:fixture", pageRules({ acceptLanguage: EN }));
-  assert.match(body?.text ?? "", /^Agents now finish/);
+  assert.match(body?.body?.text ?? "", /^Agents now finish/);
   assert.equal(languages.some((hit) => hit.path === "/zh/post"), false, "no read was sent to the translation");
   await fetchRss(source({ feedUrl: `${site}/en/feed.xml`, acceptLanguage: EN }));
   assert.equal(sent("/en/feed.xml"), EN);
@@ -270,7 +271,7 @@ test("a source's language reaches its listing, detail page and article body, whi
   // Without one, the default Chinese preference stays.
   await fetchWebList(source(listing));
   assert.match(sent("/en/blog") ?? "", /^zh-CN/);
-  assert.match((await extractFromUrl(item!.url, "article:fixture", pageRules({})))?.text ?? "", /^智能体/);
+  assert.match((await extractFromUrl(item!.url, "article:fixture", pageRules({})))?.body?.text ?? "", /^智能体/);
 });
 
 test("a source's language is an Accept-Language value, refused by kinds that read no pages", () => {
@@ -281,4 +282,102 @@ test("a source's language is an Accept-Language value, refused by kinds that rea
     }
   }
   for (const kind of ["x_search", "mp_account", "external"] as const) assert.deepEqual(unsupportedConfig(kind, { acceptLanguage: "en" }), ["acceptLanguage"], kind);
+});
+
+test("attachment references preserve signed URLs and source order without collecting navigation or unsafe targets", () => {
+  const base = "https://school.example/info/1005/1628.htm";
+  const signed = "/virtual_attach_file.vsb?afc=a%2Fb+X&oid=17&e=.pdf&signature=Keep%2FMe";
+  const html = `<html><body><nav><a href="/menu.docx">导航</a></nav>
+    <div id="vsb_content"><div class="v_news_content"><table><tr><td>
+    <a href="../../form.docx">申请<strong>表</strong></a></td></tr></table>
+    <a href="${signed.replaceAll("&", "&amp;")}">文件.pdf</a>
+    <a href="../../form.docx">重复</a><a href="#section">附件</a>
+    <a href="javascript:download()">下载</a><a onclick="download()">下载</a>
+    <a href="https://user:pass@files.example/a.pdf">下载</a>
+    <a href="http://127.1/a.pdf">下载</a><a href="http://[::1]/a.pdf">下载</a>
+    <a href="/login">附件下载</a><a href="/notice.htm">普通通知</a>
+    <p>附件下载：https://files.example/material.pptx?token=A%2FB&amp;order=2</p>
+    </div></div><ul class="attachments"><li><a href="https://official.example/material">报名材料</a></li></ul>
+    <p>下一条：<a href="/other.docx">别篇材料</a></p></body></html>`;
+  const got = htmlAttachments(html, base);
+  assert.deepEqual(got, [
+    { name: "申请表", url: "https://school.example/form.docx" },
+    { name: "文件.pdf", url: new URL(signed, base).href },
+    { name: "https://files.example/material.pptx?token=A%2FB&order=2", url: "https://files.example/material.pptx?token=A%2FB&order=2" },
+    { name: "报名材料", url: "https://official.example/material" },
+  ]);
+  assert.deepEqual(safeAttachments([...got, got[0], { name: "private", url: "http://10.0.0.1/a.pdf" }, { name: "unsafe", url: "data:text/html,x" }]), got);
+  assert.deepEqual(htmlAttachments("<p>附件见原文</p>", base, true), []);
+});
+
+test("a short attachment-only notice returns references independently of an unavailable body", async () => {
+  pages["/attachment-only"] = () => '<html><body><div id="vsb_content"><table><tr><td><a href="https://files.example/form.docx?signature=Keep%2FMe">申请表</a></td></tr></table></div></body></html>';
+  const page = await extractFromUrl(`${site}/attachment-only`, "article:attachment-only", {}, { paidFallback: false });
+  assert.equal(page?.body, null);
+  assert.deepEqual(page?.attachments, [{ name: "申请表", url: "https://files.example/form.docx?signature=Keep%2FMe" }]);
+  // Detail extraction reuses the native page needed for its missing publication date.
+  const detail = await fetchDetail(`${site}/attachment-only`, source({ detail: {} }), { body: true, date: true, title: false, summary: false });
+  assert.equal(detail.body, null);
+  assert.deepEqual(detail.attachments, page?.attachments);
+});
+
+test("cached VSB content shapes distinguish this notice's files from neighbouring file entries", () => {
+  const root = "https://exchange.blcu.edu.cn";
+  assert.deepEqual(htmlAttachments('<html><body><div class="box" id="vsb_content"><div class="v_news_content"><p><a href="../../waishijiedaishenpibiao.docx" target="_self">外事接待审批表</a><br></p></div></div></body></html>', `${root}/info/1005/1628.htm`),
+    [{ name: "外事接待审批表", url: `${root}/waishijiedaishenpibiao.docx` }]);
+  assert.deepEqual(htmlAttachments('<html><body><div class="box" id="vsb_content"><div class="v_news_content"><p><a href="../../lipinlingyongshenqingbiao.doc" target="_self">礼品领用申请单</a></p></div></div></body></html>', `${root}/info/1005/1627.htm`),
+    [{ name: "礼品领用申请单", url: `${root}/lipinlingyongshenqingbiao.doc` }]);
+  const download = "http://exchange.blcu.edu.cn/module/download/downfile.jsp?classid=0&filename=d34692a4230d47f1bc9c921644d51714.docx";
+  assert.deepEqual(htmlAttachments(`<html><body><div id="vsb_content"><div class="v_news_content"><h1><span><a href="${download}"><img src="/virtual_attach_file.vsb?e=.png">课程描述.docx</a></span></h1></div></div></body></html>`, `${root}/info/1090/1249.htm`),
+    [{ name: "课程描述.docx", url: download }]);
+  assert.deepEqual(htmlAttachments('<html><body><div id="vsb_content"><div class="v_news_content"><p>本页正文</p></div></div><p>上一条：<a href="../../zwhzbx/zhongwaihezuobanxuexiangmushenqingbiao.doc">中外合作办学项目申请表</a></p><p>下一条：<a href="../../zwhzbx/zhongwaihezuobanxuejigoushenqingbiao.doc">中外合作办学机构申请表</a></p></body></html>', `${root}/info/1207/1401.htm`), []);
+  assert.deepEqual(htmlAttachments('<html><body><main><p>普通正文</p></main><h3>附件：</h3><ul><li><a href="https://official.example/form">报名表</a></li></ul></body></html>', root),
+    [{ name: "报名表", url: "https://official.example/form" }]);
+  assert.deepEqual(htmlAttachments('<p>附件下载：https://official.example/download?token=A%2FB&amp;id=1</p>', root, true),
+    [{ name: "https://official.example/download?token=A%2FB&id=1", url: "https://official.example/download?token=A%2FB&id=1" }]);
+});
+
+test("cached graduate VSB numbered attachment lists preserve download queries without neighbouring notices", () => {
+  const base = "https://yjsy.blcu.edu.cn/info/1048/9859.htm";
+  const first = "/system/_content/download.jsp?urltype=news.DownloadAttachUrl&owner=2070671048&wbfileid=10F338AC6FEA5A44C87E4FDE4A2D738D";
+  const second = "/system/_content/download.jsp?urltype=news.DownloadAttachUrl&owner=2070671048&wbfileid=5C6813D5E1885CAB91DCEF2C8DB12332";
+  for (const space of ["", " "]) {
+    const html = `<html><body>
+      <div id="vsb_content" class="art-body d"><div class="v_news_content"><p>本次公示为拟录取。</p></div></div><div id="div_vote_id"></div>
+      <p><UL style="list-style-type:none;">
+        <li>附件${space}1：<a href="${first}" target="_blank">北京语言大学2027年硕士推免生拟录取名单.pdf</a></li>
+        <li>附件${space}2：<a href="${second}" target="_blank">北京语言大学2027年直博生拟录取名单.pdf</a></li>
+      </UL></p>
+      <div class="art-info"><div class="pnext">
+        <p>上一条：<a href="9889.htm">北京语言大学2027年各专业推免生拟录取人数</a></p>
+        <p>下一条：<a href="9869.htm">关于2027年推免拟录取考生政审的通知</a></p>
+      </div></div>
+      <ul><li><a href="/unscoped.pdf">非附材容器中的下载</a></li></ul>
+    </body></html>`;
+    assert.deepEqual(htmlAttachments(html, base), [
+      { name: "北京语言大学2027年硕士推免生拟录取名单.pdf", url: `https://yjsy.blcu.edu.cn${first}` },
+      { name: "北京语言大学2027年直博生拟录取名单.pdf", url: `https://yjsy.blcu.edu.cn${second}` },
+    ]);
+  }
+});
+
+test("completed streaming boundaries supply the same visible body and material links on both fetch paths", async () => {
+  const text = "The publisher has completed this streamed article and supplied its application material. ".repeat(8);
+  const attachments = [{ name: "Application material", url: "https://official.example/streamed.docx?token=A%2FB&id=1" }];
+  pages["/streamed-material"] = () => `<html><head><title>Streamed notice</title></head><body>
+    <article><!--$?--><template id="B:material"></template><p>Loading <a href="https://official.example/loading.pdf">Loading form</a></p><!--/$--></article>
+    <div hidden id="S:material"><p>${text}</p><p><a href="${attachments[0]!.url.replaceAll("&", "&amp;")}">Application material</a></p></div>
+    <div hidden id="S:pending"><p><a href="https://official.example/unfinished.pdf">Unfinished form</a></p></div>
+    <script>$RC("B:material","S:material")</script></body></html>`;
+  const page = await extractFromUrl(`${site}/streamed-material`, "article:streamed-material", {}, { paidFallback: false });
+  assert.ok(page);
+  assert.ok(page.body);
+  assert.ok(page.body.text.includes(text.trim()));
+  assert.ok(!page.body.text.includes("Loading form"));
+  assert.deepEqual(page.attachments, attachments);
+  const detail = await fetchDetail(`${site}/streamed-material`, source({ detail: {} }), { body: true, date: true, title: false, summary: false });
+  assert.ok(detail.body);
+  assert.ok(detail.body.text.includes(text.trim()));
+  assert.ok(!detail.body.text.includes("Loading form"));
+  assert.deepEqual(detail.attachments, attachments);
 });
