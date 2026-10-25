@@ -2,17 +2,263 @@
 
 ## BLCUhelper 首次启动与更新
 
-本站基于固定上游提交 `a0d1e75b00ede7e503ca948e71a468db964b2df2`。首次启动只导入学生处“活动公告”一个公开栏目，不再导入 AI 示例来源；正文展示与 RSS 全文转载许可都关闭。初始采集间隔为 120 分钟，详情配置必须保留 `maxFetches: 8`：底座未配置详情预算时不会读取详情，列表预览成功不能证明已取得正文或可信日期。
+首次启动从 `industry/sources.json` 导入 25 个公开栏目：5 个校级学生事务栏目，以及逐院核验后接入的学院公告、讲座与学生栏目；不再导入 AI 示例来源。各来源均为官方一手 `T1`，采集间隔 120 分钟，每轮最多补读 8 篇详情、首次最多导入 8 条历史材料，正文展示与 RSS 全文转载许可均关闭。列表预览成功不等于取得正文或完成模型分析；官方名录中的每个单位及其缺口见[校内公告覆盖](sources.md#校内公告覆盖)。
 
 `.env.example` 的 `COLLECT_ENABLED` 和 `MODEL_CALLS_ENABLED` 默认关闭。先核对来源、模型凭据、预算及全文许可，再显式设成 `true` 并重启后端；飞书与 IndexNow 外发开关保持关闭，除非维护者另行配置。开发 agents 的订阅登录不能代替站点的 `LLM_API_KEY`。
 
 本期入站接口新增可选 `bodyText`，复用材料身份、来源归属与修订，不需要新增数据库迁移。缺失、空白或非字符串不清空已有正文；自动创建的 external 来源保持隔离。同 URL 的核验补充必须使用既有归属 `sourceId`，不是另建“微信汇总”来源来覆盖原材料。缺可信日期不能用接收时间补造，图片与附件正文需人工核对；详见[信源说明](sources.md#外部推送接口)。
 
+来源直链与附材引用更新无需数据库迁移或新环境变量，但需要同时更新 API 与前端构建：列表契约新增原文链接，详情新增附材列表。附材写入既有材料元数据，正常公开且仅有摘要许可的通知可以引用原站材料地址，不开放正文或附件全文。旧正文已保留的链接可直接引用；原来丢失的链接不会自动批量回抓或触发模型重算。后续成功读取原文时更新链接，明确无附材时清除旧列表，读取失败时保留；详见[原文与附材引用](sources.md#原文与附材引用)。
+
 已有 `.env` 与数据库不会被初始化脚本覆盖，种子文件也不会删除或替换旧来源。若从已有 AI 示例站更新，先备份并暂停旧来源；**暂停采集不会自动撤回旧公开页面**，需在后台审查旧内容并按需撤回。不要通过清库或重写历史迁移完成校园切换。
 
-公开上线前还需维护者确认 `site/pages/` 的使用规则和隐私草案，并完成真实样本金标与模型评测。本地合成验收材料不能发布到生产；无真实模型处理与留出集证据时，不宣称校园筛选质量达标或公众号链路已通过。
+校内公告扩源更新不需要迁移、环境变量或采集器改造。已有部署运行 `scripts/seed.ts` 只追加缺少的来源，不覆盖管理员已修改的来源，也不删除旧材料；可先保持 worker 停止和采集、模型开关关闭，核对后台信源配置后再决定启用自动任务。首次手动采集会保存材料并排队，未启动 worker 不会执行后续模型分析；扩源不代表历史存档全量回填或全校通知已覆盖。
+
+公开上线前还需维护者确认 `site/pages/` 的使用规则和隐私草案，并完成真实样本金标与模型评测。本地合成验收材料不能发布到生产；公众号已验证的是小范围匿名读取与隔离入站，不是全账号订阅或完整材料核验，不能据此宣称校园筛选质量达标。
+
+### 服务器上的公众号按需试读
+
+使用已有 Node.js 24 环境，无需桌面微信、浏览器、微信扫码或个人 Cookie。运行 `scripts/read-wechat.ts`，它只向 ReadGZH 匿名请求已知公开 URL，输出待核验 JSON，不写数据库、不调用模型、不自动发布：
+
+```bash
+mkdir -p .data
+node --env-file=.env scripts/read-wechat.ts \
+  --url 'https://mp.weixin.qq.com/s/lONUf3iI1UNifJCkZmqm0w' \
+  --source-id blcu-beiyuqingnian --source-name 北语青年 \
+  > .data/wechat-draft.json
+```
+
+Docker 部署可在现有后端容器运行同一个脚本，无需另起桌面采集服务：
+
+```bash
+docker compose exec -T api node scripts/read-wechat.ts \
+  --url 'https://mp.weixin.qq.com/s/lONUf3iI1UNifJCkZmqm0w' \
+  --source-id blcu-beiyuqingnian --source-name 北语青年
+```
+
+输出的 `review` 必须阅读：第三方正文、发布时间与身份尚需核验，图片不会 OCR，缺失的“阅读原文”附件地址不猜测补造。纯图片、缺日期、错误页及服务明确分块的响应会报错，不输出伪完整正文。核验后可将 `sourceId`、`sourceName`、`items` 交给既有 [鉴权入站接口](sources.md#外部推送接口)；须在后端私有环境配置已有的 `INGEST_TOKEN`，缺失时接口返回 401。使用同一原归属来源 ID 补充，不另建汇总来源覆盖旧文；新建 external 来源默认隔离，入库不等于公开。
+
+匿名读取受 ReadGZH 的免费额度、限流与共享缓存规则约束，失败直接退出，不自动充值、添加 API Key、重试或切换付费服务。它不是全量公众号搜索或账号订阅。只提交有权使用的公开链接，正文许可仍以原发布方为准。Dajiala 的账号监控需另外配置 key 并确认预算；RSS 自部署方案还涉及扫码与会话续期，本次未获得这些账号前提，不宣称已验证无人值守订阅。
+
+出站沿用 `guardedFetch` 的 SSRF 防护。普通服务器无需额外代理；若本机 TUN/fake-IP 将公共域名解析到 `198.18.0.0/15`，会被正确拒绝。修正 DNS 或按已有部署能力配置 `EGRESS_PROXY_URL`，不要为此开启 `ALLOW_PRIVATE_NETWORK_FETCH`。本机试读通过已有 HTTP 代理完成，未修改系统网络或降低地址检查；服务器应使用自己的真实出口配置，不照抄本机代理端口。
 
 
+### 微信公众号采集服务试验（wechat-mp-tools 原生 RSS）
+
+针对文学院等公众号外链缺口，项目提供了基于 [wechat-mp-tools](https://github.com/x554960766/wechat-mp-tools) 的私有试验部署。上游 `LICENSE` 是 MIT 文本并附个人研究声明，README 又禁止商业用途，许可表述不一致；当前仅作内部试验，公开或商业使用前须厘清许可。采集器不接收本站 `.env`、数据库密码或模型密钥，管理端点不对公网开放。
+
+#### 1. 初始化独立上游目录
+
+在仓库根目录运行初始化脚本。脚本会克隆（或核验）上游仓库并严格检出至固定 commit `0313de2a17838557e53b630af245654cc03ab2d5`，校验并应用安全补丁 `deploy/wechat-mp-tools.patch`，并在未配置时写入安全默认设置（关闭图片/视频/PDF/Markdown 导出、关闭文章上传、关闭头像外网下载，关闭 `content_filter` 以完整保留二维码与表单链接）：
+
+```bash
+node scripts/setup-wechat-mp-tools.ts
+```
+
+该脚本不安装 Python 依赖、不启动后台进程、不修改本站 `.env`，重复执行会保留操作员已有配置。既有的 `scripts/read-wechat.ts` 保持独立可用。
+
+#### 2. 服务端 Docker 部署（推荐用于 Linux 服务器）
+
+在具备 Docker 环境的服务器上，使用可选叠加配置 `docker-compose.wechat-mp.yml`。此服务独立构建并仅绑定在 `127.0.0.1:5200`，不包含在默认站点构建中，不开放公网访问。若需在远端服务器人工扫码登录，应使用 SSH 端口转发（如 `ssh -L 5200:127.0.0.1:5200 user@server`）在本地浏览器打开后台：
+
+```bash
+# 仅启动 wechat-mp-tools 独立容器
+docker compose -f docker-compose.yml -f docker-compose.wechat-mp.yml up -d --build wechat-mp-tools
+```
+
+服务默认不需要无头浏览器（构建参数 `INSTALL_BROWSERS=0`）。上游管理界面无全局鉴权，`RSS_TOKEN` 仅用于订阅输出校验，**严禁将 5200 端口直接映射至公网**。
+
+#### 3. Linux 本地轻量虚拟环境（不使用 Docker 时）
+
+若服务器不运行 Docker 或需轻量常驻，上游自带的 `requirements.txt` / `requirements-mp.txt` 包含了 Playwright 等重量级浏览器依赖；但对于仅需微信读书接口调度与原生 RSS 渲染的场景，只需安装轻量依赖（无 PDF/浏览器组件）：
+
+```bash
+python3 -m venv .data/wechat-mp-tools/.venv
+.data/wechat-mp-tools/.venv/bin/python -m pip install flask flask-cors requests beautifulsoup4 certifi
+cd .data/wechat-mp-tools && .venv/bin/python app_mp.py --host 127.0.0.1 --port 5200
+```
+
+#### 4. 内网安全放行与信源对接
+
+采集器的原生 RSS 输出格式为：
+- 容器同网络直连：`http://wechat-mp-tools:5200/api/articles/rss/<URL-encoded account>?full=1`
+- 本机进程直连：`http://127.0.0.1:5200/api/articles/rss/<URL-encoded account>?full=1`
+
+安全规则与参数要求：
+- **放行内网 Host**：本站默认拒绝内网抓取。若通过 Docker 叠加配置启动，叠加层默认在 `PRIVATE_FEED_HOSTS` 未设置时代入 `wechat-mp-tools`；若操作员已有 `PRIVATE_FEED_HOSTS`（例如配置了 RSSHub），必须**显式追加**对应主机名（如 `PRIVATE_FEED_HOSTS=rsshub,wechat-mp-tools`），**严禁开启 `ALLOW_PRIVATE_NETWORK_FETCH`**。
+- **补丁修复要点**：RSS 使用微信原文 URL，不链接本地预览；正文读取未过滤的 `data.json.content`，保留外部链接，超长时省略而不截断。下载时缺日期保持为 0，RSS 省略 `<pubDate>`；下载记录不使用列表或采集时间补造日期。按规范化 URL / reviewId 去重，保留同标题的不同文章。日期保证仅适用于固定提交加补丁后的新下载，不导入旧版本可能已用采集时间补造日期的存档。
+- **显式代理**：微信读书请求只使用采集器自身明确启用的代理配置，关闭时直连；不读取环境代理或 netrc。部署时使用自己的可信出口，不启用上游预置的不明代理节点，也不照抄开发机端口。
+- **调度与能力边界**：自动调度每轮最多请求 5 页、每页请求 10 条，本地订阅缓存最多 200 条；仍受微信读书索引、接口可用性和扫码会话有效期限制，不等于完整历史或无人值守保证。默认轻量运行不安装浏览器；遇到验证或正文缺失时需人工核对，不绕过验证。
+
+本机已在 Linux/WSL 运行服务。维护者扫码后，账号检索与北语青年身份核对通过，第一页取得 38 篇文章；选取最新 8 篇下载，8 篇成功，并保存 120 分钟间隔的订阅配置。网站通过后台预览、创建独立隔离源 `blcu-beiyuqingnian-rss`，原 `external` 来源与历史材料不迁移；仅在私有 `.env` 放行订阅地址主机 `127.0.0.1` 并重启 API，没有打开整站私网访问。
+
+单账号 RSS 当前提供 9 篇（含此前已下载的一篇历史通知），本站首次采集新增 8 篇，重复采集新增及修订均为 0。新增材料中 4 篇取得可用文字，另 4 篇原始正文仅 0、22、36、20 字并含图片，保持 `pending`，不将图片文字臆写为正文。这批材料未提供可确认的附材下载链接，不猜测补造；已有材料引用规则不变。已修正上游把文件名安全字符当作原文标题输出的问题，RSS 保留发布者原始标点。
+
+实测新增材料全部隔离，未调用模型、未产生公开投影；后台可查看[来源及采集记录](http://localhost:3000/admin/sources/blcu-beiyuqingnian-rss)。采集器自动订阅已配置，尚未观察定时首轮和会话长期续期；本站周期 worker 未启动，`COLLECT_ENABLED`、`MODEL_CALLS_ENABLED` 继续关闭，目前同步为显式手动采集。Docker 构建仍未在本机验证；这些结果不代表各院公众号覆盖率。
+
+### 微信公众号采集监控与邮件告警（外部 systemd 定时器）
+
+针对独立运行的 `wechat-mp-tools` 采集器，项目在宿主机提供轻量单次巡检脚本 `scripts/wechat-mp-watchdog.py` 与配对的 systemd 服务/定时器。监控独立于主站后端及模型服务，通过本地 HTTP 健康接口读取状态，仅在需要授权或显式执行 `--authorize` 时调用本地授权接口；不连接数据库、不读取主站 `.env` 或模型密钥。
+
+#### 1. 工作原理与分类边界
+
+- **本地只读巡检**：定时器每 10 分钟单次执行巡检，通过 HTTP 只读请求 `http://127.0.0.1:5200/healthz`（仅限本地回环地址，无重定向，超时 5 秒，最大响应 1 MiB）。
+- **状态判别**：
+  - **健康状态**：排程运行中（`scheduler_running: true`）、处于采集时间窗口内或窗口外（`in_fetch_window: false`）、活跃订阅均按时更新、或当前订阅尚无新文章发布但无报错。无新文章不判定为故障。
+  - **本地缓存状态**：接口报告的账号 `active` 仅代表本地缓存的扫码登录状态，不发起实时微信接口核验。
+  - **人工处理与鉴权恢复机制**：
+    - **账号凭据失效（`accounts_auth` / `subscription_auth`）**：不再仅简单报错。当启用的订阅因鉴权受阻、活跃账号为 0、冷却为 0 且存在失效账号或订阅鉴权错误（genuine auth incident）时，巡检器自动请求采集器本地鉴权端点生成登录二维码，并将二维码图片（MIME JPEG/PNG 内嵌 `cid` 与附件双重展示）随邮件发送给既有已配置的 QQ 邮箱收件人（`WATCHDOG_MAIL_TO`）。二维码有效期硬性限制为最长 5 分钟，正文附带失效绝对时间，邮件内绝不包含明文密码、Token 或本地/外部图片链接。用户只需在手机微信扫码并确认授权；上游后台守护长轮询线程捕获确认后自动换取凭据并更新账号池，且立即将因鉴权失败受阻的启用订阅排入最近调度周期；下一轮（10 分钟）宿主机巡检检测到账号恢复或进度完成，自动清除鉴权标记并单独发送一封授权恢复通知（与其他独立的采集告警解耦）。
+    - **去重与防刷屏硬限制**：每个鉴权故障周期（auth incident）仅自动发信 1 次，有效期内未扫码或失败仅产生一条纯文本失效通知；定时器巡检绝不会每 10 分钟无限重复邮件轰炸。若操作员错过 5 分钟扫码窗口或需主动续期，可通过 CLI 参数 `--authorize` 手动显式触发一次刷新并发送最新二维码（复用未过期二维码，过期则生成新码）。
+    - **验证码与非鉴权故障**：腾讯防水墙滑动验证码（`subscription_verification`）无法通过二维码扫码解除，仅告警不重启、不生成二维码；临时冷却（`accounts_cooldown`）等待自然到期；常规抓取网络异常（`subscription_collection`）产生告警但不重启。
+  - **可自动恢复故障**：仅在**采集服务当前处于运行中**的前提下，遇到服务进程 HTTP 无法连接、响应结构异常、内置调度器已停止（`scheduler_stopped`）、或启用的订阅在时间窗口内超期未拉取且处于停摆状态（`scheduler_stalled`，排除正处于抓取中或有鉴权/采集异常的情况）时，才尝试受限重启自愈。鉴权恢复不依赖重启服务。
+- **受限自动恢复**：
+  - **频次硬限制**：全局每小时最多尝试重启 1 次（冷却时间 3600 秒）。执行重启前，将初始故障事件与重启时间一起原子保存；命令失败仍计入冷却，监控中途退出也保留待通知的故障。
+  - **单次复检**：重启后固定等待 10 秒就绪期，随后执行且仅执行 1 次复检。
+  - **非运行态绝不自愈**：若服务当前处于停止（`stopped`，如运维人工暂停）或未安装（`missing`），巡检器绝对不自动拉起服务。
+  - **进程崩溃与挂起分工**：日常进程崩溃由 Docker `restart: unless-stopped` 或 systemd `Restart=on-failure` 处理；巡检器专注于检测进程存活但内部死锁、排程停摆或端口僵死的场景。
+- **邮件通知与去重保证**：
+  - **首检静默与故障去重**：首次正常巡检不发邮件；仅在发生新故障、故障原因变化或故障彻底恢复时触发邮件通知。同一故障持续存在期间不会每 10 分钟重复刷屏。
+  - **保留待发事件**：SMTP 失败时保留持久化 FIFO 队列（`pending_notifications`），下一轮重试，失败返回非零退出码。同轮自动恢复合并为一封结果邮件，不丢弃此前积压事件。SMTP 超时或发送后中断可能导致重复投递，重试沿用同一 Message-ID；SMTP 接收成功不等于已进入收件箱或已读。
+  - **外部排程防并发**：由 systemd 定时器严格单实例串行驱动（定时器默认不重叠触发）；**严禁使用 crontab 并行调度**。
+- **状态文件与单向迁移（v1 -> v2）**：
+  - 监控状态文件规范升级为版本 2，引入 `authorization` 标记记录鉴权会话生命周期与过期时间。
+  - 首次可写运行会校验现有版本 1 状态，并单向升级、原子写回版本 2，完整保留原有的 `last_restart_at`、`incident_key` 及待发送事件队列（`pending_notifications`）。不保留双格式写入、不重置冷却、不修改数据库。
+  - 探针模式（`--probe-only`）严格保持零状态 IO。损坏或非法状态文件绝不静默覆盖。
+- **运维停机维护与手动 CLI 原则**：
+  - 在对采集器进行版本升级、配置修改或停机维护前，**必须先停止 watchdog 定时器与服务**；严禁通过清空或删除持久化状态文件来重置冷却时间。
+  - 生产 systemd 单元的状态路径为 `/var/lib/blcu-wechat-mp-watchdog/state.json`；手动执行可写 CLI（如 `--authorize`）时，必须显式指定 `--state /var/lib/blcu-wechat-mp-watchdog/state.json`，避免误用开发仓库下的默认文件。`--probe-only` 不读写任何状态文件，无需该参数。执行可写手动命令前务必停止后台 timer/service，避免并发写入。
+
+#### 2. 配置专属独立 SMTP 环境变量文件
+
+巡检脚本严禁读取或混用主站的 `.env`。必须将范本复制到受保护的系统目录，并严格限制文件权限为仅 root 可读写：
+
+```bash
+# 创建配置目录并复制范本
+sudo mkdir -p /etc/blcuhelper
+sudo cp deploy/wechat-mp-watchdog.env.example /etc/blcuhelper/wechat-mp-watchdog.env
+# 系统级 systemd 管理器在以 User 降权前已完成 EnvironmentFile 读取，
+# 统一设为 root:root 0600，限制配置文件的直接读取：
+sudo chown root:root /etc/blcuhelper/wechat-mp-watchdog.env
+sudo chmod 600 /etc/blcuhelper/wechat-mp-watchdog.env
+```
+
+编辑 `/etc/blcuhelper/wechat-mp-watchdog.env`。完整的全部 SMTP 变量定义与端口/协议说明见范本 [deploy/wechat-mp-watchdog.env.example](../deploy/wechat-mp-watchdog.env.example)。必须注意：
+- **配置必须真实完整**：填写真实的 `WATCHDOG_SMTP_HOST`、`WATCHDOG_MAIL_FROM`、`WATCHDOG_MAIL_TO` 以及（若需要认证时的）`WATCHDOG_SMTP_USERNAME` / `WATCHDOG_SMTP_PASSWORD`。`WATCHDOG_MAIL_TO` 仅接受一个收件地址；多个地址会在探测、恢复或状态写入之前报配置错误，不会静默选取第一个。
+- **SMTP 安全传输**：支持 `WATCHDOG_SMTP_SECURITY=tls`（默认，端口通常为 465）或 `starttls`（端口通常为 587）。底层通过 Python `ssl.create_default_context()` 强制验证证书，不支持非安全明文传输；严禁在仓库内提交真实密码或凭证。
+- **开关规则**：填写完邮件凭据与地址后，再把范本中的 `WATCHDOG_EMAIL_ENABLED=false` 改为 `true`。完整巡检在邮件配置缺失时明确报错，不静默退化为“只打印日志”；应先通过测试邮件再启用定时器。
+
+#### 3. 部署准备与 Docker 镜像重构（适用于 Docker 运行模式）
+
+在启用定时器前，如果更新了上游补丁或监控代码，必须先重新准备上游代码并重新构建采集器镜像，确保容器内输出的新版 `/healthz` 字段结构与巡检器匹配：
+
+```bash
+# 1. 确保上游代码与补丁处于最新状态
+node scripts/setup-wechat-mp-tools.ts
+
+# 2. 重新构建并启动采集器容器
+docker compose -f docker-compose.yml -f docker-compose.wechat-mp.yml up -d --build wechat-mp-tools
+```
+
+> **注意**：采集器的 Dockerfile 自身已包含每 10 分钟一次的容器健康检查（HEALTHCHECK）。Docker 本身将容器标记为 `unhealthy` 并不会自动重启容器；此处的 watchdog 脚本即用于提供受控的自动恢复能力。
+
+#### 4. 安全测试：仅探测与发信验证
+
+在将定时任务交付 systemd 托管之前，应以只读和受控测试模式验证配置。为了防止在运维终端回显中泄露邮件凭据，推荐使用 `systemd-run` 注入独立环境文件：
+
+```bash
+# 1. 仅探测健康状态（不发送邮件、不写入状态文件、不触发任何恢复操作）
+python3 scripts/wechat-mp-watchdog.py --probe-only
+
+# 2. 发送单次测试邮件（推荐：通过 systemd-run 瞬态加载环境文件，避免 shell 历史泄漏凭据）
+sudo systemd-run --wait --pipe --property=EnvironmentFile=/etc/blcuhelper/wechat-mp-watchdog.env \
+  /usr/bin/python3 /opt/blcuhelper/scripts/wechat-mp-watchdog.py --test-email
+
+# 3. 主动发起扫码授权或在二维码过期后主动重发（安全注入环境文件，显式指定生产状态路径）
+# 执行前请先停止后台 timer 与 service，避免并发写入 state.json：
+sudo systemctl stop blcu-wechat-mp-watchdog.timer blcu-wechat-mp-watchdog.service
+sudo systemd-run --wait --pipe --property=EnvironmentFile=/etc/blcuhelper/wechat-mp-watchdog.env \
+  /usr/bin/python3 /opt/blcuhelper/scripts/wechat-mp-watchdog.py --authorize --state /var/lib/blcu-wechat-mp-watchdog/state.json
+# 授权操作完成后恢复定时器：
+sudo systemctl start blcu-wechat-mp-watchdog.timer
+```
+
+若测试邮件返回 `{"sent": 1, "exit_code": 0}`，表示测试邮件已被 SMTP 接收。还需到收件箱（含垃圾邮件目录）确认收到；这一步不能由返回码替代。
+
+显式执行 `--authorize` 的行为与状态说明：
+- **直连回环验证与轻量支持**：`--authorize` 直接校验目标本地回环 HTTP `/healthz` 与鉴权端点，既支持生产容器/守护模式，也支持在开发调试中通过源码直接运行的采集器（`python app_mp.py`），不需要依赖 Docker 或 systemd，也不会主动拉起或重启任何运行时服务（自动巡检仍严格尊重运行时 `stopped` / `missing` 状态）。
+- **返回码与等待确认**：当二维码邮件成功经由 SMTP 发送时，命令返回 `exit_code: 0`。此时输出中的 `codes` 忠实保留当前真实的健康探测发现（例如 `accounts_auth`），并不代表整体系统已经健康恢复，而是表示已成功投递二维码、等待操作员在手机上确认授权。
+- **错误返回**：若发生 HTTP 探针失联、上游鉴权接口异常、二维码已过期或 SMTP 发信失败，命令均返回退出码 `1`，且终端仅输出脱敏的摘要信息（不打印任何 Token、Cookie 或密钥）。
+
+#### 5. 安装与启用宿主机 systemd 定时器
+
+项目预置的 systemd 文件假设部署根目录为 `/opt/blcuhelper`，运行用户为 `blcuhelper`。**如果你的实际安装路径不同，请在复制前先行调整 unit 文件中的 `WorkingDirectory` 与 `ExecStart` 路径**。
+
+##### 默认 Docker 运行时
+
+预置的 `deploy/systemd/blcu-wechat-mp-watchdog.service` 默认配置了 `SupplementaryGroups=docker`。
+预先创建专用的 `blcuhelper` 用户和组，确认它能读取 `/opt/blcuhelper` 下的脚本并访问本地 Docker socket。unit 使用 systemd 管理的 `StateDirectory=blcu-wechat-mp-watchdog` 保存状态，目录按服务用户创建，无需授予仓库写权限。若部署路径不同，须同步修改 unit 的 `WorkingDirectory`、脚本路径以及后文 override 中的路径。
+> **安全风险警示**：将非特权系统用户加入 `docker` 组在 Linux 安全模型中等同于赋予 root 权限（root-equivalent）。生产环境中请仅向受信服务分配，或者采用后文介绍的纯原生 systemd 运行模式。
+
+先复制监控单元，再选择 Docker 或原生模式，最后启用定时器；不要先启动错误运行时：
+
+```bash
+# 复制 unit 文件至系统目录
+sudo cp deploy/systemd/blcu-wechat-mp-watchdog.service /etc/systemd/system/
+sudo cp deploy/systemd/blcu-wechat-mp-watchdog.timer /etc/systemd/system/
+
+# Docker 模式：确认测试邮件与 --probe-only 均通过后启用
+sudo systemctl daemon-reload
+sudo systemctl enable --now blcu-wechat-mp-watchdog.timer
+systemctl list-timers blcu-wechat-mp-watchdog.timer
+```
+
+##### 可选原生 systemd 模式（不使用 Docker 时）
+
+若采集器采用本地虚拟环境原生常驻（即由 `deploy/systemd/blcu-wechat-mp.service` 托管，单元内已配有 `Restart=on-failure`）：
+
+1. 安装采集器服务：
+   ```bash
+   sudo cp deploy/systemd/blcu-wechat-mp.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now blcu-wechat-mp.service
+   ```
+
+2. 为 watchdog 服务配置 override，切换为 `--runtime systemd` 并配置专有安全隔离：
+   > **权限与安全模型说明**：
+   > - 原生采集器自身（`blcu-wechat-mp.service`）保持非特权普通用户 `blcuhelper` 运行。
+   > - `--runtime systemd` 下 watchdog 需要通过 `systemctl` 检查与重载系统服务单元（`try-restart`）。由于普通用户在未安装特定 polkit/sudoers 规则时无权重启系统级服务单元，且系统不自动安装 sudoers/polkit 规则，因此原生 watchdog unit 需切换为 `User=root`、`Group=root` 并清空 `SupplementaryGroups=`。
+   > - **防提权关键**：由 root 身份定时执行的监控脚本（`scripts/wechat-mp-watchdog.py`）及其上级代码目录（`/opt/blcuhelper`）**必须由 root 拥有且严禁对采集器普通用户 `blcuhelper` 开放写权限**，防止非特权采集进程通过篡改脚本反向提权。
+   > - **状态隔离**：必须使用 root 拥有的独立系统状态目录 `StateDirectory=blcu-wechat-mp-watchdog`，并将状态文件指向 `--state /var/lib/blcu-wechat-mp-watchdog/state.json`，严禁写入普通用户可写的 `.data` 目录。
+
+   配置 override：
+   ```bash
+   sudo systemctl edit blcu-wechat-mp-watchdog.service
+   ```
+   在打开的编辑器中填入：
+   ```ini
+   [Service]
+   # 原生 watchdog 需管理系统服务单元，指定 root 用户执行
+   User=root
+   Group=root
+   # 清空原有的 Docker 附加组权限
+   SupplementaryGroups=
+   # 隔离并声明独立状态目录 /var/lib/blcu-wechat-mp-watchdog
+   StateDirectory=blcu-wechat-mp-watchdog
+   # 覆盖执行命令，指定 systemd 运行时及独立状态路径
+   ExecStart=
+   ExecStart=/usr/bin/python3 /opt/blcuhelper/scripts/wechat-mp-watchdog.py --runtime systemd --state /var/lib/blcu-wechat-mp-watchdog/state.json
+   ```
+   在 systemd 模式下，若操作员主动执行 `sudo systemctl stop blcu-wechat-mp.service` 暂停了服务，watchdog 识别到服务处于 `inactive/stopped` 状态，绝对不会违背意图自动拉起。
+
+   保存 override 后再执行 `sudo systemctl daemon-reload` 和 `sudo systemctl enable --now blcu-wechat-mp-watchdog.timer`。原生部署应跳过上面的 Docker 启用命令，但仍须先复制 watchdog 的 `.service` / `.timer` 文件。
+
+#### 6. 能力边界与验证说明
+
+已在 Linux/WSL 完成隔离授权实跑：实际 Flask HTTP 接口、原后台授权线程、账号落盘、订阅调度及带证书验证的 TLS SMTP 均参与执行；仅微信扫码、换票与外部文章接口使用受控本地响应。观察到二维码图片邮件、重复检查不重发、同账号原位更新、仅唤醒启用且闲置的鉴权失败订阅、真实采集完成前保留旧错误，以及独立的授权恢复通知与后续整体恢复通知。该实跑不等于已观察到维护者在手机上确认真实授权。宿主机回归 67 项、采集器相关回归 39 项通过；固定上游干净副本补丁重放、初始化幂等、本站类型检查和前端生产构建通过。
+
+宿主机监控测试不需要数据库或第三方 Python 依赖：`python3 -m unittest discover -s tests -p test_wechat_mp_watchdog.py -v`。Docker 模式按固定 service 与项目工作目录标签定位唯一容器，直接调用 Docker CLI，不解析网站 Compose 配置或加载主站 `.env`。
+
+本机 Windows 原生 Python 已通过 QQ 邮箱 465/TLS 实际发送普通测试邮件及真实 `--authorize` 登录二维码图片邮件（5 分钟有效、带内嵌图片与附件），SMTP 均返回成功；收件箱入箱仍须收件人查收。本机 WSL 的 465/TLS 与 587/STARTTLS 握手曾超时，根因未确定，不能推断目标服务器也失败或已可用。当前 PID 1 为 WSL init，且未安装 Docker，未启用生产 systemd 定时器或验收 Docker 控制；目标服务器必须配置独立 SMTP 文件并先完成 `--test-email`。本方案不自动代扫、不跳过腾讯验证码，也不保证所有异常都能自愈。
 ## 用 Docker（推荐）
 
 需要一台装了 Docker（带 Compose）的机器。云服务器建议至少 2 核、4 GB 内存，构建镜像时要用到。
@@ -39,7 +285,7 @@ RSS、分享链接、站点地图和 Agent Markdown 中的绝对链接都使用�
 docker compose up -d --build
 ```
 
-启动后打开 `http://服务器地址:3000`，后台在 `/admin`，用管理员密码登录。第一次启动会导入示范信源，一两分钟后开始出现内容；第一次导入的一百多条资料大约半小时处理完（每条都要预筛、评分、结构化、写标题摘要，再归组）。
+启动后打开 `http://服务器地址:3000`，后台在 `/admin`，用管理员密码登录。首次启动先增量导入来源配置；默认安全阀关闭时，不会自动采集或调用模型。确认来源与预算并显式启用后，worker 才按配置采集和分析。25 个来源首次每个最多导入 8 条材料，实际数量取决于列表、历史窗口与过滤结果；陈旧栏目可能入库为零。正文、日期、分析及公开条件均满足后才可能出现在读者页面，不能承诺几分钟内全部可见。
 
 `docker compose` 会起五个容器：`db`（PostgreSQL 17）、`setup`（每次启动先跑数据库迁移和种子数据，然后退出）、`api`、`worker`（抓取、模型处理、定时任务）、`web`（网页）。`web` 只接收网站地址、API 地址等网页配置，通过 HTTP 读取 API；数据库、模型和管理员密钥，以及数据卷，只交给后端容器。
 

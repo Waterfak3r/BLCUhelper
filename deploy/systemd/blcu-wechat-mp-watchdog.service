@@ -1,0 +1,17 @@
+[Unit]
+Description=BLCU private WeChat collector health and SMTP watchdog
+
+[Service]
+Type=oneshot
+User=blcuhelper
+Group=blcuhelper
+# Docker group membership is root-equivalent; never grant it to untrusted users.
+SupplementaryGroups=docker
+WorkingDirectory=/opt/blcuhelper
+EnvironmentFile=/etc/blcuhelper/wechat-mp-watchdog.env
+StateDirectory=blcu-wechat-mp-watchdog
+ExecStart=/usr/bin/python3 /opt/blcuhelper/scripts/wechat-mp-watchdog.py --runtime docker --state /var/lib/blcu-wechat-mp-watchdog/state.json
+TimeoutStartSec=120
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true

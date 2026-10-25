@@ -1,0 +1,23 @@
+# Prepare first: node scripts/setup-wechat-mp-tools.ts
+# Service only: docker compose -f docker-compose.yml -f docker-compose.wechat-mp.yml up -d --build wechat-mp-tools
+services:
+  wechat-mp-tools:
+    build:
+      context: ./.data/wechat-mp-tools
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        INSTALL_BROWSERS: "0"
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5200:5200"
+    volumes:
+      - ./.data/wechat-mp-tools/data:/app/data
+    # Deliberately no env_file, website credentials, proxy route, or stack dependencies.
+
+  api:
+    environment:
+      PRIVATE_FEED_HOSTS: ${PRIVATE_FEED_HOSTS-wechat-mp-tools}
+
+  worker:
+    environment:
+      PRIVATE_FEED_HOSTS: ${PRIVATE_FEED_HOSTS-wechat-mp-tools}

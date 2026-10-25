@@ -1,0 +1,11 @@
+[Unit]
+Description=Check BLCU private WeChat collector every ten minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+AccuracySec=15s
+Unit=blcu-wechat-mp-watchdog.service
+
+[Install]
+WantedBy=timers.target
