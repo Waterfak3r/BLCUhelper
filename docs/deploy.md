@@ -165,7 +165,7 @@ sudo chmod 600 /etc/blcuhelper/wechat-mp-watchdog.env
 
 编辑 `/etc/blcuhelper/wechat-mp-watchdog.env`。完整的全部 SMTP 变量定义与端口/协议说明见范本 [deploy/wechat-mp-watchdog.env.example](../deploy/wechat-mp-watchdog.env.example)。必须注意：
 - **配置必须真实完整**：填写真实的 `WATCHDOG_SMTP_HOST`、`WATCHDOG_MAIL_FROM`、`WATCHDOG_MAIL_TO` 以及（若需要认证时的）`WATCHDOG_SMTP_USERNAME` / `WATCHDOG_SMTP_PASSWORD`。`WATCHDOG_MAIL_TO` 仅接受一个收件地址；多个地址会在探测、恢复或状态写入之前报配置错误，不会静默选取第一个。
-- **SMTP 安全传输**：支持 `WATCHDOG_SMTP_SECURITY=tls`（默认，端口通常为 465）或 `starttls`（端口通常为 587）。底层通过 Python `ssl.create_default_context()` 强制验证证书，不支持非安全明文传输；严禁在仓库内提交真实密码或凭证。
+- **SMTP 安全传输**：支持 `WATCHDOG_SMTP_SECURITY=tls`（默认，端口通常为 465）或 `starttls`（端口通常为 587）。底层通过 Python `ssl.create_default_context()` 强制验证证书，不支持非安全明文传输；使用企业 CA 时，在独立 watchdog 环境文件中设置 `SSL_CERT_FILE` 指向受信任的 PEM CA 文件。自定义 CA 不关闭证书或主机名验证；严禁在仓库内提交真实密码或凭证。
 - **开关规则**：填写完邮件凭据与地址后，再把范本中的 `WATCHDOG_EMAIL_ENABLED=false` 改为 `true`。完整巡检在邮件配置缺失时明确报错，不静默退化为“只打印日志”；应先通过测试邮件再启用定时器。
 
 #### 3. 部署准备与 Docker 镜像重构（适用于 Docker 运行模式）

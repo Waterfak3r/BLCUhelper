@@ -390,7 +390,8 @@ def send_notification(config: MailConfig, event: dict) -> None:
         elif event["kind"] == "authorization_expired":
             text += "Authorization QR expired or failed. Run --authorize explicitly to renew; phone confirmation is required.\n"
         message.set_content(text)
-    context = ssl.create_default_context()
+    cafile = os.environ.get("SSL_CERT_FILE")
+    context = ssl.create_default_context(cafile=cafile) if cafile else ssl.create_default_context()
     try:
         if config.security == "tls":
             client = smtplib.SMTP_SSL(config.host, config.port, timeout=10, context=context)
