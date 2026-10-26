@@ -47,7 +47,7 @@ function parseHostMap(raw: string | undefined): Map<string, string> {
   return map;
 }
 
-const hostMap = parseHostMap(env.FEED_HOST_MAP || env.PRIVATE_FEED_HOST_MAP);
+const hostMap = parseHostMap(env.FEED_HOST_MAP);
 const explicitHosts = (env.PRIVATE_FEED_HOSTS || "").split(",").map((v) => v.trim().toLowerCase()).filter(Boolean);
 const mappedHosts = Array.from(hostMap.entries()).flatMap(([from, to]) => [from.split(":")[0]!, to.split(":")[0]!]);
 const privateFeedHosts = Array.from(new Set([...explicitHosts, ...mappedHosts]));

@@ -1,12 +1,18 @@
 // Standalone integration test for WeChat MP RSS parsing and intake.
 // Verifies that WeChat MP RSS 2.0 payloads (with content:encoded and images)
-// are parsed accurately into candidates without network or database dependencies.
+// are parsed accurately using a local HTTP fixture, without external services or a database.
 import "./standalone.ts";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { after, test } from "node:test";
+import { config } from "@aihot/backend/config";
 import { fetchRss } from "@aihot/backend/sources/rss";
 import type { SourceRow } from "@aihot/backend/sources/types";
+
+const addedPrivateHost = !config.privateFeedHosts.includes("127.0.0.1");
+if (addedPrivateHost) {
+  config.privateFeedHosts.push("127.0.0.1");
+}
 
 let serverPort = 0;
 const sampleAccount = "%E5%8C%97%E8%AF%AD%E6%95%99%E5%8A%A1"; // 北语教务
@@ -79,6 +85,10 @@ await new Promise<void>((resolve) => {
 });
 
 after(() => {
+  if (addedPrivateHost) {
+    const idx = config.privateFeedHosts.indexOf("127.0.0.1");
+    if (idx !== -1) config.privateFeedHosts.splice(idx, 1);
+  }
   server.close();
 });
 

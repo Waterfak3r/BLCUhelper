@@ -61,7 +61,7 @@ const FIXTURE = {
       slug: "notice",
       name: "学术通知",
       group: "genre" as const,
-      tags: ["校园资讯"],
+      tags: ["教务考试", "校园资讯"],
       definition: "学术通知与校园资讯类"
     },
     {
