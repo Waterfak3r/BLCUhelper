@@ -1,6 +1,18 @@
 {
-  "latestVersion": "2026-10-26T10:30",
+  "latestVersion": "2026-10-26T11:20",
   "releases": [
+    {
+      "date": "2026-10-26",
+      "time": "11:20",
+      "kind": "更新",
+      "title": "解耦公众号采集网络地址，建立信源对账与实验分支 CI 验收",
+      "body": [
+        "规范化 28 个微信公众号 RSS 信源地址为 Docker 服务名 wechat-mp-tools:5200，并在抓取层支持 FEED_HOST_MAP 动态重写，解耦 Docker 容器网络与宿主机本地运行环境。",
+        "提供 scripts/sync-sources.ts 与 scripts/seed.ts --update-configs，支持已有数据库中信源配置的受控平滑更新。",
+        "新增 scripts/reconcile-wechat-sources.ts 对账工具，严格区分正常覆盖、合法空源、长期静默、未订阅等状态，杜绝空订阅误判达标。",
+        "在 GitHub Actions 中补齐 experiment/** 分支触发，集成 Python Watchdog 测试、补丁幂等验证与微信 RSS 离线入库集成测试。"
+      ]
+    },
     {
       "date": "2026-10-26",
       "time": "10:30",

@@ -31,6 +31,27 @@ function bool(name: string, fallback: boolean): boolean {
   return value === "true";
 }
 
+function parseHostMap(raw: string | undefined): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!raw) return map;
+  for (const entry of raw.split(",")) {
+    const trimmed = entry.trim().toLowerCase();
+    if (!trimmed) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq > 0) {
+      const from = trimmed.slice(0, eq).trim();
+      const to = trimmed.slice(eq + 1).trim();
+      if (from && to) map.set(from, to);
+    }
+  }
+  return map;
+}
+
+const hostMap = parseHostMap(env.FEED_HOST_MAP || env.PRIVATE_FEED_HOST_MAP);
+const explicitHosts = (env.PRIVATE_FEED_HOSTS || "").split(",").map((v) => v.trim().toLowerCase()).filter(Boolean);
+const mappedHosts = Array.from(hostMap.entries()).flatMap(([from, to]) => [from.split(":")[0]!, to.split(":")[0]!]);
+const privateFeedHosts = Array.from(new Set([...explicitHosts, ...mappedHosts]));
+
 export const isProduction = env.NODE_ENV === "production";
 
 /** AIHOT_CREDENTIALS_DIR, else the site's own default (relative to the repository). */
@@ -44,7 +65,9 @@ export const config = {
   egressProxyUrl: env.EGRESS_PROXY_URL || null,
   allowPrivateNetworkFetch: bool("ALLOW_PRIVATE_NETWORK_FETCH", false),
   /** Whole host names of self-hosted feed services on private addresses; only listing fetches use them. */
-  privateFeedHosts: (env.PRIVATE_FEED_HOSTS || "").split(",").map((v) => v.trim().toLowerCase()).filter(Boolean),
+  privateFeedHosts,
+  /** Rewrites feed host / host:port before fetching, e.g. "wechat-mp-tools=127.0.0.1". */
+  feedHostMap: hostMap,
   feishuContentPushEnabled: bool("FEISHU_CONTENT_PUSH_ENABLED", false),
   indexNowSubmitEnabled: bool("INDEXNOW_SUBMIT_ENABLED", false),
   /** IndexNow key (32 hex characters); without one nothing is submitted and no key file is served. */

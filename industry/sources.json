@@ -680,7 +680,7 @@
       "name": "北京语言大学·北语教务（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E6%95%99%E5%8A%A1?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E6%95%99%E5%8A%A1?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -695,7 +695,7 @@
       "name": "北京语言大学·北语资助与学业发展（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E8%B5%84%E5%8A%A9%E4%B8%8E%E5%AD%A6%E4%B8%9A%E5%8F%91%E5%B1%95?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E8%B5%84%E5%8A%A9%E4%B8%8E%E5%AD%A6%E4%B8%9A%E5%8F%91%E5%B1%95?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -710,7 +710,7 @@
       "name": "北京语言大学·北语后勤（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E5%90%8E%E5%8B%A4?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E5%90%8E%E5%8B%A4?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -725,7 +725,7 @@
       "name": "北京语言大学·平安北语（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%B9%B3%E5%AE%89%E5%8C%97%E8%AF%AD?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%B9%B3%E5%AE%89%E5%8C%97%E8%AF%AD?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -740,7 +740,7 @@
       "name": "北京语言大学·心理中心（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E5%BF%83%E7%90%86%E4%B8%AD%E5%BF%83?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E5%BF%83%E7%90%86%E4%B8%AD%E5%BF%83?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -755,7 +755,7 @@
       "name": "北京语言大学·北语青年（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E9%9D%92%E5%B9%B4?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E9%9D%92%E5%B9%B4?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1_5",
@@ -770,7 +770,7 @@
       "name": "北京语言大学·校学生会（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E6%A0%A1%E5%AD%A6%E7%94%9F%E4%BC%9A?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E6%A0%A1%E5%AD%A6%E7%94%9F%E4%BC%9A?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1_5",
@@ -785,7 +785,7 @@
       "name": "北京语言大学·校研究生会（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E6%A0%A1%E7%A0%94%E7%A9%B6%E7%94%9F%E4%BC%9A?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E6%A0%A1%E7%A0%94%E7%A9%B6%E7%94%9F%E4%BC%9A?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1_5",
@@ -800,7 +800,7 @@
       "name": "北京语言大学·北语社团理事会（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E7%A4%BE%E5%9B%A2%E7%90%86%E4%BA%8B%E4%BC%9A?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E7%A4%BE%E5%9B%A2%E7%90%86%E4%BA%8B%E4%BC%9A?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1_5",
@@ -815,7 +815,7 @@
       "name": "北京语言大学·北语志愿服务总队（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E5%BF%97%E6%84%BF%E6%9C%8D%E5%8A%A1%E6%80%BB%E9%98%9F?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E5%BF%97%E6%84%BF%E6%9C%8D%E5%8A%A1%E6%80%BB%E9%98%9F?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1_5",
@@ -830,7 +830,7 @@
       "name": "北京语言大学·图书馆（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E5%9B%BE%E4%B9%A6%E9%A6%86?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E5%9B%BE%E4%B9%A6%E9%A6%86?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -845,7 +845,7 @@
       "name": "北京语言大学·文学院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E6%96%87%E5%AD%A6%E9%99%A2?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E6%96%87%E5%AD%A6%E9%99%A2?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -860,7 +860,7 @@
       "name": "北京语言大学·商学院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E5%95%86%E5%AD%A6%E9%99%A2?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E5%95%86%E5%AD%A6%E9%99%A2?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -875,7 +875,7 @@
       "name": "北京语言大学·信息科学学院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E4%BF%A1%E6%81%AF%E7%A7%91%E5%AD%A6%E5%AD%A6%E9%99%A2?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E4%BF%A1%E6%81%AF%E7%A7%91%E5%AD%A6%E5%AD%A6%E9%99%A2?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -890,7 +890,7 @@
       "name": "北京语言大学·英语和高级翻译学院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E8%8B%B1%E8%AF%AD%E5%92%8C%E9%AB%98%E7%BA%A7%E7%BF%BB%E8%AF%91%E5%AD%A6%E9%99%A2?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E8%8B%B1%E8%AF%AD%E5%92%8C%E9%AB%98%E7%BA%A7%E7%BF%BB%E8%AF%91%E5%AD%A6%E9%99%A2?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -905,7 +905,7 @@
       "name": "北京语言大学·外国语言文化学院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/BLCU%E5%A4%96%E9%99%A2%E7%A0%94%E7%A9%B6%E7%94%9F?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/BLCU%E5%A4%96%E9%99%A2%E7%A0%94%E7%A9%B6%E7%94%9F?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1_5",
@@ -920,7 +920,7 @@
       "name": "北京语言大学·国际中文学院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E5%9B%BD%E9%99%85%E4%B8%AD%E6%96%87%E5%AD%A6%E9%99%A2%E7%A0%94%E7%A9%B6%E7%94%9F%E4%BC%9A?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E5%9B%BD%E9%99%85%E4%B8%AD%E6%96%87%E5%AD%A6%E9%99%A2%E7%A0%94%E7%A9%B6%E7%94%9F%E4%BC%9A?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1_5",
@@ -935,7 +935,7 @@
       "name": "北京语言大学·应用中文学院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E5%BA%94%E7%94%A8%E4%B8%AD%E6%96%87%E5%AD%A6%E9%99%A2?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E5%BA%94%E7%94%A8%E4%B8%AD%E6%96%87%E5%AD%A6%E9%99%A2?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -950,7 +950,7 @@
       "name": "北京语言大学·汉学与中国学学院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E6%B1%89%E5%AD%A6%E4%B8%8E%E4%B8%AD%E5%9B%BD%E5%AD%A6%E5%AD%A6%E9%99%A2?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E6%B1%89%E5%AD%A6%E4%B8%8E%E4%B8%AD%E5%9B%BD%E5%AD%A6%E5%AD%A6%E9%99%A2?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -965,7 +965,7 @@
       "name": "北京语言大学·一带一路研究院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E4%B8%80%E5%B8%A6%E4%B8%80%E8%B7%AF%E7%A0%94%E7%A9%B6%E9%99%A2?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E4%B8%80%E5%B8%A6%E4%B8%80%E8%B7%AF%E7%A0%94%E7%A9%B6%E9%99%A2?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -980,7 +980,7 @@
       "name": "北京语言大学·马克思主义学院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E9%A9%AC%E9%99%A2?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E9%A9%AC%E9%99%A2?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -995,7 +995,7 @@
       "name": "北京语言大学·艺术学院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/BLCU%E8%89%BA%E6%9C%AF%E5%AD%A6%E9%99%A2?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/BLCU%E8%89%BA%E6%9C%AF%E5%AD%A6%E9%99%A2?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -1010,7 +1010,7 @@
       "name": "北京语言大学·教育学院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E6%95%99%E8%82%B2%E5%AD%A6%E9%99%A2?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E6%95%99%E8%82%B2%E5%AD%A6%E9%99%A2?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -1025,7 +1025,7 @@
       "name": "北京语言大学·语言科学与资源学院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E8%A8%80%E7%A7%91%E9%9D%92%E8%AF%AD?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E8%A8%80%E7%A7%91%E9%9D%92%E8%AF%AD?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1_5",
@@ -1040,7 +1040,7 @@
       "name": "北京语言大学·心理与认知科学学院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E5%BF%83%E7%90%86%E4%B8%8E%E8%AE%A4%E7%9F%A5%E7%A7%91%E5%AD%A6%E5%AD%A6%E9%99%A2?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E5%BF%83%E7%90%86%E4%B8%8E%E8%AE%A4%E7%9F%A5%E7%A7%91%E5%AD%A6%E5%AD%A6%E9%99%A2?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -1055,7 +1055,7 @@
       "name": "北京语言大学·中国书法国际传播研究院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E4%B8%AD%E5%9B%BD%E4%B9%A6%E6%B3%95%E5%9B%BD%E9%99%85%E4%BC%A0%E6%92%AD%E7%A0%94%E7%A9%B6%E9%99%A2?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E4%B8%AD%E5%9B%BD%E4%B9%A6%E6%B3%95%E5%9B%BD%E9%99%85%E4%BC%A0%E6%92%AD%E7%A0%94%E7%A9%B6%E9%99%A2?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -1070,7 +1070,7 @@
       "name": "北京语言大学·国际学院（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E5%9B%BD%E9%99%85%E5%AD%A6%E9%99%A2?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E5%9B%BD%E9%99%85%E5%AD%A6%E9%99%A2?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",
@@ -1085,7 +1085,7 @@
       "name": "北京语言大学·体育教学部（微信）",
       "kind": "rss",
       "config": {
-        "feedUrl": "http://127.0.0.1:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E4%BD%93%E8%82%B2%E6%95%99%E5%AD%A6%E9%83%A8?limit=20",
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E4%BD%93%E8%82%B2%E6%95%99%E5%AD%A6%E9%83%A8?limit=20",
         "_aihot": { "initialBackfillLimit": 8 }
       },
       "tier": "T1",

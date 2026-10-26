@@ -5,7 +5,7 @@ name: Check
 
 on:
   push:
-    branches: [main]
+    branches: [main, "experiment/**"]
   pull_request:
   workflow_dispatch:
 
@@ -121,3 +121,27 @@ jobs:
       - name: Stop
         if: always()
         run: docker compose down -v
+
+  wechat-mp-experiment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Python Watchdog unit tests
+        run: python3 -m unittest discover -s tests -p "test_*.py"
+      - name: Verify setup-wechat-mp-tools patch idempotency
+        run: |
+          node scripts/setup-wechat-mp-tools.ts
+          node scripts/setup-wechat-mp-tools.ts
+      - name: WeChat sources intake integration test
+        run: node --test tests/wechat-rss-intake.standalone.test.ts
+      - name: Reconcile WeChat sources verification
+        run: |
+          node scripts/reconcile-wechat-sources.ts --json > "$RUNNER_TEMP/reconcile.json"
+          cat "$RUNNER_TEMP/reconcile.json"

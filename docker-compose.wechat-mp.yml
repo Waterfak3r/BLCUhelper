@@ -17,7 +17,9 @@ services:
   api:
     environment:
       PRIVATE_FEED_HOSTS: ${PRIVATE_FEED_HOSTS-wechat-mp-tools}
+      FEED_HOST_MAP: ${FEED_HOST_MAP-}
 
   worker:
     environment:
       PRIVATE_FEED_HOSTS: ${PRIVATE_FEED_HOSTS-wechat-mp-tools}
+      FEED_HOST_MAP: ${FEED_HOST_MAP-}

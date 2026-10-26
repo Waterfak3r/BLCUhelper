@@ -1,6 +1,7 @@
 // Free listing reads: one retry for transient transport/upstream failures within the original deadline.
 import { setTimeout } from "node:timers/promises";
 import { guardedFetch, type GuardedFetchOptions, type GuardedResponse } from "../lib/http-fetch.ts";
+import { config } from "../config.ts";
 
 const RETRY_DELAY_MS = 1000;
 const TRANSIENT_CODES = new Set(["ECONNRESET", "EPIPE", "ETIMEDOUT", "EAI_AGAIN", "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT"]);
@@ -23,14 +24,50 @@ function transientResponse(input: string, res: GuardedResponse): boolean {
   return [500, 502, 503, 504].includes(res.status) || res.status === 404 && youtubeFeed(input) && youtubeFeed(res.url);
 }
 
+export function rewriteListingUrl(input: string, hostMap: Map<string, string>): string {
+  if (hostMap.size === 0) return input;
+  try {
+    const u = new URL(input);
+    const hostWithPort = u.host.toLowerCase();
+    const hostname = u.hostname.toLowerCase();
+    const mappedWithPort = hostMap.get(hostWithPort);
+    if (mappedWithPort) {
+      if (mappedWithPort.includes(":")) {
+        const [targetHost, targetPort] = mappedWithPort.split(":");
+        u.hostname = targetHost!;
+        u.port = targetPort!;
+      } else {
+        u.hostname = mappedWithPort;
+        u.port = "";
+      }
+      return u.toString();
+    }
+    const mappedHost = hostMap.get(hostname);
+    if (mappedHost) {
+      if (mappedHost.includes(":")) {
+        const [targetHost, targetPort] = mappedHost.split(":");
+        u.hostname = targetHost!;
+        u.port = targetPort!;
+      } else {
+        u.hostname = mappedHost;
+      }
+      return u.toString();
+    }
+  } catch {
+    // Keep original on invalid URL
+  }
+  return input;
+}
+
 export async function fetchListing(input: string, opts: GuardedFetchOptions = {}): Promise<GuardedResponse> {
+  const targetUrl = opts.privateFeedHost === false ? input : rewriteListingUrl(input, config.feedHostMap);
   const repeatable = (opts.method ?? "GET").toUpperCase() === "GET" && opts.body === undefined;
   const deadline = Date.now() + (opts.timeoutMs ?? 20_000);
   for (let attempt = 0; ; attempt++) {
     const canRetry = () => repeatable && attempt === 0 && deadline - Date.now() > RETRY_DELAY_MS;
     try {
       // Listing addresses come from the source configuration, so a listed private feed host may serve them.
-      const res = await guardedFetch(input, { ...opts, privateFeedHost: true, timeoutMs: Math.max(1, deadline - Date.now()) });
+      const res = await guardedFetch(targetUrl, { ...opts, privateFeedHost: true, timeoutMs: Math.max(1, deadline - Date.now()) });
       if (!canRetry() || !transientResponse(input, res)) return res;
     } catch (error) {
       if (!canRetry() || !transientTransport(error)) throw error;
