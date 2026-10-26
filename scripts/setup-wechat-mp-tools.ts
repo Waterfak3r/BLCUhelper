@@ -1,12 +1,13 @@
 // Private mp-only experiment. Node.js 24; no package installation or website .env access.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const checkout = resolve(root, ".data/wechat-mp-tools");
 const patch = resolve(root, "deploy/wechat-mp-tools.patch");
+const subscriptionsSeedPath = resolve(root, "deploy/wechat-mp-subscriptions.seed.json");
 const repository = "https://github.com/x554960766/wechat-mp-tools.git";
 const commit = "0313de2a17838557e53b630af245654cc03ab2d5";
 
@@ -19,7 +20,7 @@ function git(args: string[], required = true) {
   return result;
 }
 
-function seed(name: string, value: Record<string, unknown>) {
+function seed(name: string, value: Record<string, unknown> | Array<unknown>) {
   const path = resolve(checkout, "data", name);
   if (!existsSync(path)) {
     writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 });
@@ -65,6 +66,10 @@ function main() {
     request_delay: 3.0,
   });
   seed("content_filter.json", { enabled: false });
+  if (existsSync(subscriptionsSeedPath)) {
+    const rawSeed = JSON.parse(readFileSync(subscriptionsSeedPath, "utf8")) as unknown[];
+    seed("rss_subscriptions.json", rawSeed);
+  }
   console.log(`Pinned mp-only experiment ready (${commit}). Existing operator settings preserved. No service started.`);
 }
 

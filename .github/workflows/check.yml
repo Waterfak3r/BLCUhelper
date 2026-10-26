@@ -133,15 +133,17 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
       - name: Python Watchdog unit tests
         run: python3 -m unittest discover -s tests -p "test_*.py"
-      - name: Verify setup-wechat-mp-tools patch idempotency
+      - name: Verify setup-wechat-mp-tools patch idempotency and seed
         run: |
           node scripts/setup-wechat-mp-tools.ts
           node scripts/setup-wechat-mp-tools.ts
-      - name: WeChat sources intake integration test
-        run: node --test tests/wechat-rss-intake.standalone.test.ts
+      - name: WeChat standalone tests (Host rewrite, Intake, Reconcile)
+        run: node --test tests/listing-fetch.standalone.test.ts tests/reconcile-wechat-sources.standalone.test.ts tests/wechat-rss-intake.standalone.test.ts
       - name: Reconcile WeChat sources verification
         run: |
+          node scripts/reconcile-wechat-sources.ts --strict
           node scripts/reconcile-wechat-sources.ts --json > "$RUNNER_TEMP/reconcile.json"
-          cat "$RUNNER_TEMP/reconcile.json"

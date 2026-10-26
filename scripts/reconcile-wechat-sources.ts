@@ -10,14 +10,14 @@ import { REPO_ROOT } from "@aihot/backend/config";
 
 export type ReconcileStatus =
   | "STATUS_HEALTHY"        // Subscribed, fetch ok, articles present
-  | "STATUS_EMPTY_FEED"     // Subscribed, fetch ok, but 0 articles ever collected
+  | "STATUS_EMPTY_FEED"     // Subscribed, fetch ok, but verified 0 articles
   | "STATUS_QUIET"          // Subscribed, fetch ok, but no new articles in window
+  | "STATUS_UNKNOWN"        // Subscribed & fetched, but article output cannot be verified
   | "STATUS_FAILING"        // Subscribed, but last fetch resulted in error
   | "STATUS_NEVER_FETCHED"  // Subscribed, but last_fetch_time is 0
-  | "STATUS_DISABLED"       // Disabled in source config or collector
+  | "STATUS_DISABLED"       // Disabled in source config, database or collector
   | "STATUS_MISSING_SUB"    // Expected in sources.json, but missing in collector subscriptions
   | "STATUS_MISSING_DB";    // Expected in sources.json, but not seeded in database
-
 export interface ExpectedSource {
   id: string;
   name: string;
@@ -63,8 +63,8 @@ export interface ReconciliationItem {
   collectorLastFetch: Date | null;
   collectorError: string | null;
   inDatabase: boolean;
-  dbArticlesCount: number;
-  dbRecentArticlesCount: number;
+  dbArticlesCount: number | null;
+  dbRecentArticlesCount: number | null;
   riskNote: string;
 }
 
@@ -74,8 +74,13 @@ export interface ReconciliationReport {
   totalSubscribedInCollector: number;
   coveredCount: number;
   missingSubCount: number;
+  missingDbCount: number;
   failingCount: number;
-  emptyOrQuietCount: number;
+  neverFetchedCount: number;
+  emptyFeedCount: number;
+  quietCount: number;
+  unknownCount: number;
+  disabledCount: number;
   items: ReconciliationItem[];
 }
 
@@ -132,8 +137,13 @@ export function reconcileWeChatSources(
   const items: ReconciliationItem[] = [];
   let coveredCount = 0;
   let missingSubCount = 0;
+  let missingDbCount = 0;
   let failingCount = 0;
-  let emptyOrQuietCount = 0;
+  let neverFetchedCount = 0;
+  let emptyFeedCount = 0;
+  let quietCount = 0;
+  let unknownCount = 0;
+  let disabledCount = 0;
 
   for (const exp of expected) {
     const sub = subMap.get(exp.account);
@@ -148,13 +158,15 @@ export function reconcileWeChatSources(
     const collectorFetchDate = collectorFetchSec > 0 ? new Date(collectorFetchSec * 1000) : null;
     const collectorError = sub?.error_kind || sub?.last_error || null;
     const inDb = dbSources ? Boolean(db) : true;
-    const totalArticles = db ? db.articlesCount : (sub?.total_articles ?? 0);
-    const recentArticles = db ? db.recentArticlesCount : (totalArticles > 0 ? 1 : 0);
+    const expDisabled = exp.enabled === false;
+    const subDisabled = sub?.enabled === false;
+    const dbDisabled = db?.enabled === false;
 
-    if (exp.enabled === false || (sub && sub.enabled === false)) {
+    if (expDisabled || subDisabled || dbDisabled) {
       status = "STATUS_DISABLED";
       statusLabel = "已停用";
-      riskNote = "配置或采集器中处于停用状态";
+      disabledCount++;
+      riskNote = dbDisabled ? "主站数据库中被停用 (enabled=false)" : "配置或采集器中处于停用状态";
     } else if (!sub) {
       status = "STATUS_MISSING_SUB";
       statusLabel = "采集器未订阅";
@@ -163,6 +175,7 @@ export function reconcileWeChatSources(
     } else if (dbSources && !inDb) {
       status = "STATUS_MISSING_DB";
       statusLabel = "主站库未收录";
+      missingDbCount++;
       riskNote = "采集器已有订阅，但主站 sources 表未初始化该信源";
     } else if (collectorError || (db && db.last_error)) {
       status = "STATUS_FAILING";
@@ -172,23 +185,45 @@ export function reconcileWeChatSources(
     } else if (collectorFetchSec === 0) {
       status = "STATUS_NEVER_FETCHED";
       statusLabel = "尚未调度抓取";
-      emptyOrQuietCount++;
+      neverFetchedCount++;
       riskNote = "已添加订阅，但尚未执行初次拉取";
-    } else if (totalArticles === 0) {
-      status = "STATUS_EMPTY_FEED";
-      statusLabel = "空订阅(无文章)";
-      emptyOrQuietCount++;
-      riskNote = "采集器已抓取但文章库为空，需核查历史或正文抓取限制";
-    } else if (recentArticles === 0) {
-      status = "STATUS_QUIET";
-      statusLabel = "近期无新文";
-      emptyOrQuietCount++;
-      riskNote = "近 7 天没有新增通知，需确认是否为低频发文账号";
     } else {
-      status = "STATUS_HEALTHY";
-      statusLabel = "正常覆盖";
-      isCovered = true;
-      coveredCount++;
+      // Collector has fetched without error. Now determine output & database layers.
+      if (dbSources && inDb && db) {
+        if (db.articlesCount === 0) {
+          status = "STATUS_EMPTY_FEED";
+          statusLabel = "空订阅(主站0篇)";
+          emptyFeedCount++;
+          riskNote = "采集器已抓取但主站收录为 0 篇，需核查信源内容或正文抓取限制";
+        } else if (db.recentArticlesCount === 0) {
+          status = "STATUS_QUIET";
+          statusLabel = "近期无新文";
+          quietCount++;
+          riskNote = `库内共 ${db.articlesCount} 篇，但近 7 天无新增通知`;
+        } else {
+          status = "STATUS_HEALTHY";
+          statusLabel = "正常覆盖";
+          isCovered = true;
+          coveredCount++;
+        }
+      } else if (typeof sub.total_articles === "number") {
+        if (sub.total_articles === 0) {
+          status = "STATUS_EMPTY_FEED";
+          statusLabel = "空订阅(采集0篇)";
+          emptyFeedCount++;
+          riskNote = "采集器抓取完成但总文章数为 0";
+        } else {
+          status = "STATUS_UNKNOWN";
+          statusLabel = "待核验入库";
+          unknownCount++;
+          riskNote = `采集器记录 ${sub.total_articles} 篇，但未连接主站数据库验证入库`;
+        }
+      } else {
+        status = "STATUS_UNKNOWN";
+        statusLabel = "待核验(无篇数统计)";
+        unknownCount++;
+        riskNote = "采集器已抓取且无报错，但 /healthz 未暴露文章统计，无法确定是否有产出";
+      }
     }
 
     items.push({
@@ -204,8 +239,8 @@ export function reconcileWeChatSources(
       collectorLastFetch: collectorFetchDate,
       collectorError,
       inDatabase: inDb,
-      dbArticlesCount: totalArticles,
-      dbRecentArticlesCount: recentArticles,
+      dbArticlesCount: db ? db.articlesCount : (typeof sub?.total_articles === "number" ? sub.total_articles : null),
+      dbRecentArticlesCount: db ? db.recentArticlesCount : null,
       riskNote,
     });
   }
@@ -216,8 +251,13 @@ export function reconcileWeChatSources(
     totalSubscribedInCollector: subscriptions.length,
     coveredCount,
     missingSubCount,
+    missingDbCount,
     failingCount,
-    emptyOrQuietCount,
+    neverFetchedCount,
+    emptyFeedCount,
+    quietCount,
+    unknownCount,
+    disabledCount,
     items,
   };
 }
@@ -297,15 +337,17 @@ export function formatReportTable(report: ReconciliationReport): string {
   lines.push(`\n=== 微信公众号信源与采集器订阅对账报告 ===`);
   lines.push(`生成时间: ${report.timestamp}`);
   lines.push(`预期信源: ${report.totalExpected} 个 | 采集器实际订阅: ${report.totalSubscribedInCollector} 个`);
-  lines.push(`正常覆盖: ${report.coveredCount} 个 | 缺少订阅: ${report.missingSubCount} 个 | 抓取报错: ${report.failingCount} 个 | 空源/静默: ${report.emptyOrQuietCount} 个\n`);
+  lines.push(`正常覆盖: ${report.coveredCount} 个 | 缺少订阅: ${report.missingSubCount} 个 | 抓取报错: ${report.failingCount} 个 | 未调度: ${report.neverFetchedCount} 个`);
+  lines.push(`空订阅: ${report.emptyFeedCount} 个 | 近期静默: ${report.quietCount} 个 | 待核验: ${report.unknownCount} 个 | 已停用: ${report.disabledCount} 个\n`);
 
   lines.push(`| # | 来源 ID | 公众号名称 | 等级 | 采集器订阅 | 状态判定 | 库内篇数 | 风险说明 |`);
   lines.push(`|---|---|---|---|---|---|---|---|`);
 
   report.items.forEach((item, index) => {
     const subLabel = item.subscribedInCollector ? "已订阅" : "**未订阅**";
+    const countDisplay = item.dbArticlesCount !== null ? String(item.dbArticlesCount) : "-";
     lines.push(
-      `| ${index + 1} | \`${item.id}\` | ${item.account} | ${item.tier} | ${subLabel} | ${item.statusLabel} | ${item.dbArticlesCount} | ${item.riskNote || "-"} |`
+      `| ${index + 1} | \`${item.id}\` | ${item.account} | ${item.tier} | ${subLabel} | ${item.statusLabel} | ${countDisplay} | ${item.riskNote || "-"} |`
     );
   });
 
@@ -320,9 +362,19 @@ async function main() {
   const collectorUrl = urlArgIndex >= 0 && args[urlArgIndex + 1] ? args[urlArgIndex + 1]! : "http://127.0.0.1:5200/healthz";
 
   const expected = loadExpectedSources();
+  const localSubs = loadLocalCollectorSubscriptions();
+  const localMap = new Map(localSubs.map((s) => [s.nickname || s.name || "", s]));
   let subs = await fetchCollectorSubscriptions(collectorUrl);
-  if (!subs) {
-    subs = loadLocalCollectorSubscriptions();
+  if (subs) {
+    for (const sub of subs) {
+      const name = sub.nickname || sub.name || "";
+      const local = localMap.get(name);
+      if (local && typeof local.total_articles === "number" && typeof sub.total_articles !== "number") {
+        sub.total_articles = local.total_articles;
+      }
+    }
+  } else {
+    subs = localSubs;
   }
 
   const dbInfo = await queryDatabaseSources(expected.map((e) => e.id));
@@ -337,8 +389,15 @@ async function main() {
     await closeDb();
   }
 
-  if (strict && (report.missingSubCount > 0 || report.failingCount > 0)) {
-    process.exit(1);
+  if (strict) {
+    const hasBlockers = report.missingSubCount > 0
+      || report.failingCount > 0
+      || report.missingDbCount > 0
+      || report.emptyFeedCount > 0;
+    if (hasBlockers) {
+      console.error(`\n[STRICT CHECK FAILED] Found blockers: missingSub=${report.missingSubCount}, failing=${report.failingCount}, missingDb=${report.missingDbCount}, emptyFeed=${report.emptyFeedCount}`);
+      process.exit(1);
+    }
   }
 }
 

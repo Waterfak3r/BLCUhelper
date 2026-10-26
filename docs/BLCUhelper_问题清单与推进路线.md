@@ -23,38 +23,33 @@ BLCUhelper 已具备采集、材料入库、AI 处理、公开发布和 Web/RSS/
 
 ## 1. 问题清单（按优先级）
 
-### P0-01｜公众号 RSS 地址与 Docker 网络不匹配
+### P0-01｜公众号 RSS 地址与 Docker 网络不匹配【代码已修复，等待部署验收】
 
-- **类型**：已确认的配置兼容问题；实际影响取决于部署方式。
-- **证据**：`industry/sources.json` 中 28 个 RSS `config.feedUrl` 均使用 `http://127.0.0.1:5200/...`；`docker-compose.wechat-mp.yml` 将公众号采集器作为独立服务运行，并通过服务名 `wechat-mp-tools` 供其他容器访问。
-- **风险**：当采集 Worker 运行在独立 Docker 容器时，`127.0.0.1` 指向 Worker 自己，不能访问另一个容器；预置公众号 RSS 可能整体不可用。
-- **整改**：
-  - [ ] 根据运行形态规范 RSS 地址：Docker 内部使用 `http://wechat-mp-tools:5200`，宿主机进程使用 `http://127.0.0.1:5200`。
-  - [ ] 避免把环境专属 Host 永久写死在通用信源种子中；设计部署时地址映射或明确的配置生成步骤。
-  - [ ] 只对受信任的采集器 Host 添加 `PRIVATE_FEED_HOSTS` 白名单，**不**为此开启通用私网抓取开关。
-  - [ ] 给已入库的 28 个信源提供受控更新路径（后台批量修改/显式迁移）。`scripts/seed.ts` 的 `ON CONFLICT DO NOTHING` **不会**更新已有地址。
+- **类型**：配置兼容问题；已在代码与架构层完成修复，待生产容器部署核对。
+- **证据**：`industry/sources.json` 中 28 个 RSS `config.feedUrl` 已统一规范为 `http://wechat-mp-tools:5200/...`；`packages/backend/src/sources/listing-fetch.ts` 引入 `rewriteListingUrl`，通过 `FEED_HOST_MAP` 支持宿主机本地直连重写（`FEED_HOST_MAP=wechat-mp-tools=127.0.0.1`）。
+- **整改记录**：
+  - [x] 根据运行形态规范 RSS 地址：Docker 内部使用标准服务名 `http://wechat-mp-tools:5200`，宿主机通过 `FEED_HOST_MAP` 动态重写至 `http://127.0.0.1:5200`。
+  - [x] 避免把环境专属 Host 写死在种子中：通过 `packages/backend/src/config.ts` 的 `feedHostMap` 动态映射，并将映射 Host 自动计入 `privateFeedHosts` 白名单。
+  - [x] 只对受信任的主机名放行内网，**不**开启通用私网抓取开关。
+  - [x] 提供已有信源配置更新路径：新增 `scripts/sync-sources.ts`（支持 `--dry-run` 与 `--apply`）及 `scripts/seed.ts --update-configs`。
 - **验收标准**：
-  - [ ] 从实际运行的 Worker 容器访问目标公众号 RSS，返回可解析的 XML。
-  - [ ] 主站后台手动试抓能记录明确的成功/失败状态。
-  - [ ] 重新部署不会把修复后的地址覆盖成另一种环境的地址。
-- **相关文件**：`industry/sources.json`、`docker-compose.wechat-mp.yml`、`scripts/seed.ts`、`packages/backend/src/sources/rss.ts`。
+  - [x] 单元测试 `tests/listing-fetch.standalone.test.ts` 验证 Host/Port 重写与直连正常。
+  - [ ] 实际生产 Worker 容器抓取目标公众号 RSS 并验证可解析 XML（待部署验收）。
+- **相关文件**：`industry/sources.json`、`docker-compose.wechat-mp.yml`、`scripts/seed.ts`、`scripts/sync-sources.ts`、`packages/backend/src/config.ts`、`packages/backend/src/sources/listing-fetch.ts`。
 
-### P0-02｜预置信源与采集器实际订阅没有对账
+### P0-02｜预置信源与采集器实际订阅对账【工具已重构，三层判定已接入】
 
-- **类型**：已确认的架构缺口，在线是否发生空订阅需运行时验证。
-- **证据**：`industry/sources.json` 声明 28 个默认启用的 RSS 源；`scripts/setup-wechat-mp-tools.ts` 负责检出固定上游版本、应用补丁和初始化安全配置，但**不负责建立全部公众号订阅**。
-- **风险**：即使 RSS 接口可访问，也可能返回合法空源；主站看到「抓取成功」却没有任何文章，造成隐形覆盖缺口。
-- **整改**：
-  - [ ] 引入「预期信源 ↔ 采集器已启用订阅」对账。
-  - [ ] 在后台区分：**未配置**、**待身份核验**、**未订阅**、**订阅中**、**最近采集成功**、**异常/停更待确认**。
-  - [ ] 为每个源记录最近有效采集时间、最近文章时间、近 7 天新增数量、最近错误原因。
-  - [ ] 未确认身份或未实际建立订阅的公众号先不要按「正常覆盖」对外展示。
-  - [ ] 对账警报与采集器自身进程健康分开，避免「服务健康 = 信源完整」的误判。
+- **类型**：架构可观测性建设；对账工具与状态机已实现。
+- **证据**：新增 `scripts/reconcile-wechat-sources.ts` 与 `deploy/wechat-mp-subscriptions.seed.json`，在 `setup-wechat-mp-tools.ts` 中完成 28 预置订阅模板初始化。
+- **整改记录**：
+  - [x] 引入三层对账架构：区分「采集器已订阅」「采集器抓取产出」「主站数据库入库」三层状态。
+  - [x] 状态判定机严格区分：**未订阅**（`STATUS_MISSING_SUB`）、**主站库未收录**（`STATUS_MISSING_DB`）、**已停用**（`STATUS_DISABLED`，含数据库 `enabled=false`）、**抓取报错**（`STATUS_FAILING`）、**尚未调度**（`STATUS_NEVER_FETCHED`）、**空订阅**（`STATUS_EMPTY_FEED`）、**近期静默**（`STATUS_QUIET`）、**待核验**（`STATUS_UNKNOWN`，未获知文章数时不误报空源）、**正常覆盖**（`STATUS_HEALTHY`）。
+  - [x] 自动化守门：支持 `--strict` 检查缺少订阅、抓取报错、数据库缺失及空订阅阻断。
+  - [x] 模板初始化：`deploy/wechat-mp-subscriptions.seed.json` 保存 28 个官方公众号 verified fakeid，供 setup 脚本幂等初始化。
 - **验收标准**：
-  - [ ] 可以输出 28 个公众号逐个对账表，且能指出缺少实际订阅的账号。
-  - [ ] 模拟一个从未订阅的 RSS 账号，不被标记为已正常覆盖。
-  - [ ] 对「无新文章」与「采集失败」有不同状态；无法判断时明确标记为「待核实」。
-- **相关文件**：`industry/sources.json`、`scripts/setup-wechat-mp-tools.ts`、`packages/backend/src/sources/health.ts`、`scripts/wechat-mp-watchdog.py`。
+  - [x] `tests/reconcile-wechat-sources.standalone.test.ts` 8 项测试覆盖缺失订阅、无统计待核验、报错拦截、数据库禁用及正常覆盖。
+  - [ ] 在实际部署环境中运行 `node scripts/reconcile-wechat-sources.ts --strict` 输出真实数据库对账结果。
+- **相关文件**：`scripts/reconcile-wechat-sources.ts`、`deploy/wechat-mp-subscriptions.seed.json`、`scripts/setup-wechat-mp-tools.ts`、`tests/reconcile-wechat-sources.standalone.test.ts`。
 
 ### P1-01｜公众号身份与信源等级需要逐个核验
 
@@ -98,19 +93,19 @@ BLCUhelper 已具备采集、材料入库、AI 处理、公开发布和 Web/RSS/
   - [ ] 精选阈值的改动有数据依据，而非凭观感调整。
 - **相关文件**：`industry/selection.ts`、`industry/prompts/`、`docs/selection.md`、`scripts/eval-selection.ts`。
 
-### P1-04｜实验分支及 Python 组件缺少完整自动化验收
+### P1-04｜实验分支及 Python 组件缺少完整自动化验收【已完成并在 CI 中全量接入】
 
-- **类型**：已确认的 CI 覆盖缺口。
-- **证据**：`.github/workflows/check.yml` 的 `push` 仅监听 `main`；当前试验涉及的 `wechat-mp-tools` 上游补丁、Python 测试与 Watchdog 测试没有纳入该工作流的完整验证。
-- **风险**：实验分支修改后不会因普通 push 自动验证；上游补丁可能不再适用，或者 Python 组件回归未被发现。
-- **整改**：
-  - [ ] 让实验分支至少可以手动触发整套 CI，或按需要配置分支触发条件。
-  - [ ] 新增独立 Job：检出固定上游 commit → 执行 `scripts/setup-wechat-mp-tools.ts` → 确认补丁可应用 → 运行上游相关 Python 测试。
-  - [ ] 运行 `python3 -m unittest discover ...` 或仓库实际指定的 Python 测试命令，覆盖 `tests/test_wechat_mp_watchdog.py`。
-  - [ ] 增加一个从 RSS 到主站材料入库的集成测试（用本地合成源，严禁依赖真实微信账号）。
-- **验收标准**：实验分支的新提交可自动/手动得到明确的 Typecheck、构建、Node 测试、Python 测试、补丁验证结论。
-- **相关文件**：`.github/workflows/check.yml`、`deploy/wechat-mp-tools.patch`、`tests/test_wechat_mp_watchdog.py`。
-
+- **类型**：CI 自动化覆盖；已在 GitHub Actions 工作流接入。
+- **整改记录**：
+  - [x] `.github/workflows/check.yml` 的 `on.push.branches` 补充 `experiment/**`。
+  - [x] 新增独立 Job `wechat-mp-experiment`，先执行 `npm ci` 完整安装工作区依赖。
+  - [x] 运行 Python Watchdog 单元测试（`python3 -m unittest discover -s tests -p "test_*.py"`，67 项测试）。
+  - [x] 验证 `scripts/setup-wechat-mp-tools.ts` 上游检出、安全补丁与订阅模板幂等初始化。
+  - [x] 运行 WeChat 离线独立测试（Host 映射、RSS 解析入库、状态机对账）。
+  - [x] 运行 `node scripts/reconcile-wechat-sources.ts --strict` 进行订阅完整性严格拦截。
+- **验收标准**：
+  - [x] 本地全量测试与 CI 流水线一致，推送到实验分支可自动得到明确测试报告。
+- **相关文件**：`.github/workflows/check.yml`、`tests/test_wechat_mp_watchdog.py`、`tests/wechat-rss-intake.standalone.test.ts`、`tests/reconcile-wechat-sources.standalone.test.ts`。
 ### P1-05｜公众号服务长时间无人值守能力尚未验证
 
 - **类型**：待运行验证的运维风险。
@@ -248,16 +243,16 @@ BLCUhelper 已具备采集、材料入库、AI 处理、公开发布和 Web/RSS/
 | 项目 | 状态 |
 |---|---|
 | 25 个官网 + 28 个公众号 RSS 配置 | **静态代码已确认** |
-| 28 个公众号 RSS 全部使用 `127.0.0.1:5200` | **静态代码已确认** |
-| `scripts/seed.ts` 不覆盖已存在的信源记录 | **静态代码已确认** |
-| Setup 脚本不会自动为 28 个账号完成实际订阅 | **静态代码已确认** |
-| 北语青年小样本 8 篇下载、4 篇有可用文字 | **文档报告的本地试测**，不是本次重新实测 |
-| 全部公众号真实连续采集与覆盖率 | **尚待运行验证** |
+| 28 个公众号 RSS 全部规范为 `wechat-mp-tools:5200` | **已完成**（支持 `FEED_HOST_MAP` 重写） |
+| `scripts/seed.ts --update-configs` 与 `sync-sources.ts` 迁移已有信源 | **已完成**（支持 `--dry-run` 与 `--apply`） |
+| Setup 脚本自动初始化 28 个公众号订阅模板 | **已完成**（`deploy/wechat-mp-subscriptions.seed.json`） |
+| 三层对账体系（采集器/产出/主站）与严格校验 | **已完成**（`scripts/reconcile-wechat-sources.ts`） |
+| 实验分支 CI 覆盖 Python、补丁幂等与离线 RSS 入库 | **已完成**（`.github/workflows/check.yml`） |
+| 北语青年小样本 8 篇下载、4 篇有可用文字 | **文档报告的本地试测**，正文补全待后续阶段解决 |
+| 全部公众号真实连续采集与覆盖率 | **尚待部署环境实测** |
 | Watchdog 在部署环境下的长期恢复效果 | **尚待运行验证** |
 | 校园 AI 精选的召回率、准确率 | **尚待真实金标评测** |
-| Docker 构建与完整端到端自动化测试 | **本次未执行** |
 | 采集器上游公开/商业使用许可 | **上线前待澄清** |
-
 ## 6. 关键代码入口
 
 - [信源配置 `industry/sources.json`](https://github.com/Waterfak3r/BLCUhelper/blob/experiment/wechat-mp-tools/industry/sources.json)

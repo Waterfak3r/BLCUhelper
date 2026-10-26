@@ -46,12 +46,62 @@ test("reconcileWeChatSources: subscribed but empty articles is classified as STA
 
   const report = reconcileWeChatSources(expected, subscriptions);
   assert.equal(report.coveredCount, 0);
-  assert.equal(report.emptyOrQuietCount, 1);
+  assert.equal(report.emptyFeedCount, 1);
 
   const item = report.items[0]!;
   assert.equal(item.status, "STATUS_EMPTY_FEED");
   assert.equal(item.isCovered, false);
   assert.equal(item.subscribedInCollector, true);
+});
+
+test("reconcileWeChatSources: healthz without total_articles and without DB is classified as STATUS_UNKNOWN (not empty)", () => {
+  const expected: ExpectedSource[] = [
+    { id: "blcu-test-unknown", name: "北语教务", account: "北语教务", feedUrl: "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E6%95%99%E5%8A%A1", tier: "T1", enabled: true },
+  ];
+  // Simulates /healthz response: no total_articles field
+  const subscriptions: CollectorSubscription[] = [
+    { fakeid: "fake-unknown", nickname: "北语教务", enabled: true, last_fetch_time: 1729000000 },
+  ];
+
+  const report = reconcileWeChatSources(expected, subscriptions);
+  assert.equal(report.coveredCount, 0);
+  assert.equal(report.unknownCount, 1);
+  assert.equal(report.emptyFeedCount, 0);
+
+  const item = report.items[0]!;
+  assert.equal(item.status, "STATUS_UNKNOWN");
+  assert.equal(item.statusLabel, "待核验(无篇数统计)");
+  assert.equal(item.isCovered, false);
+});
+
+test("reconcileWeChatSources: source disabled in database (enabled=false) is classified as STATUS_DISABLED", () => {
+  const expected: ExpectedSource[] = [
+    { id: "blcu-test-dis", name: "北语后勤", account: "北语后勤", feedUrl: "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E5%90%8E%E5%8B%A4", tier: "T1", enabled: true },
+  ];
+  const subscriptions: CollectorSubscription[] = [
+    { fakeid: "fake-dis", nickname: "北语后勤", enabled: true, last_fetch_time: 1729000000, total_articles: 10 },
+  ];
+  const dbInfo = new Map<string, DbSourceInfo>([
+    ["blcu-test-dis", {
+      id: "blcu-test-dis",
+      enabled: false, // disabled in DB!
+      health: "healthy",
+      last_ok_at: new Date(),
+      last_error: null,
+      articlesCount: 10,
+      recentArticlesCount: 2,
+      lastArticleAt: new Date(),
+    }],
+  ]);
+
+  const report = reconcileWeChatSources(expected, subscriptions, dbInfo);
+  assert.equal(report.disabledCount, 1);
+  assert.equal(report.coveredCount, 0);
+
+  const item = report.items[0]!;
+  assert.equal(item.status, "STATUS_DISABLED");
+  assert.equal(item.isCovered, false);
+  assert.match(item.riskNote, /enabled=false/);
 });
 
 test("reconcileWeChatSources: collector error is classified as STATUS_FAILING and NOT covered", () => {
@@ -125,8 +175,7 @@ test("reconcileWeChatSources: active subscription with old articles but 0 recent
 
   const report = reconcileWeChatSources(expected, subscriptions, dbInfo);
   assert.equal(report.coveredCount, 0);
-  assert.equal(report.emptyOrQuietCount, 1);
-
+  assert.equal(report.quietCount, 1);
   const item = report.items[0]!;
   assert.equal(item.status, "STATUS_QUIET");
   assert.equal(item.isCovered, false);
