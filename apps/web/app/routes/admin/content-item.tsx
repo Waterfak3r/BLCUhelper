@@ -55,7 +55,7 @@ export default function ContentItem({ loaderData }: Route.ComponentProps) {
       title: String(f.title ?? ""),
       summary: String(f.summary ?? ""),
       reason: String(f.reason ?? ""),
-      category: String(f.category ?? ""),
+      category: f.category === null ? "none" : String(f.category ?? ""),
       tags: Array.isArray(f.tags) ? (f.tags as string[]).join(", ") : "",
       scoreMode: f.score === null ? "none" : typeof f.score === "number" ? "value" : "",
       score: typeof f.score === "number" ? String(f.score) : "",
@@ -334,7 +334,7 @@ export default function ContentItem({ loaderData }: Route.ComponentProps) {
       <ReasonDialog
         open={dialog === "override"}
         title="人工修正"
-        description="人工值优先于模型输出，之后的重处理不会覆盖；留空表示不修正该字段（清除已有修正请选“清除”）。"
+        description="人工修正优先于模型输出。文本留空或下拉选“沿用模型”会清除对应字段的人工覆盖并回退；无对应类别请选“设为未分类”。"
         confirmLabel="保存修正"
         busy={pending === "override"}
         onClose={() => setDialog(null)}
@@ -345,7 +345,8 @@ export default function ContentItem({ loaderData }: Route.ComponentProps) {
             if (fields[k].trim()) next[k] = fields[k].trim();
             else if (c.override?.fields[k] !== undefined) clear.push(k);
           }
-          if (fields.category) next.category = fields.category;
+          if (fields.category === "none") next.category = null;
+          else if (fields.category) next.category = fields.category;
           else if (c.override?.fields.category !== undefined) clear.push("category");
           if (fields.tags.trim()) next.tags = fields.tags.split(/[,，]/).map((t) => t.trim()).filter(Boolean);
           else if (c.override?.fields.tags !== undefined) clear.push("tags");
@@ -362,10 +363,12 @@ export default function ContentItem({ loaderData }: Route.ComponentProps) {
         <Field label="标题"><Input value={fields.title} placeholder={p?.title ?? ""} onChange={(e) => setFields({ ...fields, title: e.target.value })} /></Field>
         <Field label="摘要"><Textarea rows={3} value={fields.summary} placeholder={p?.summary ?? ""} onChange={(e) => setFields({ ...fields, summary: e.target.value })} /></Field>
         <Field label="推荐理由"><Textarea rows={2} value={fields.reason} placeholder={p?.reason ?? ""} onChange={(e) => setFields({ ...fields, reason: e.target.value })} /></Field>
+        <p className="text-[12px] text-ink-3">修改类别会自动同步分类标签；受众与实体标签仍需对照原文确认，信息不足请留空。</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="栏目">
             <Select value={fields.category} onChange={(e) => setFields({ ...fields, category: e.target.value })}>
-              <option value="">不修正</option>
+              <option value="">沿用模型（清除人工覆盖）</option>
+              <option value="none">设为未分类（无对应类别）</option>
               {CATEGORY_KEYS.map((k) => <option key={k} value={k}>{CATEGORY_LABELS[k]}</option>)}
             </Select>
           </Field>

@@ -6,11 +6,15 @@ export { CATEGORY_TAGS, ENTITIES, ENTITY_TAGS, ITEM_TYPES, TOPIC_TAGS } from "@a
 
 const ALLOWED_TAGS = new Set<string>([...CATEGORY_TAGS, ...TOPIC_TAGS, ...ENTITY_TAGS]);
 
-/**
- * Known tags only, synonyms mapped, duplicates dropped, at most six; the category tag goes first, and a
- * list without one gets the pack's last category tag (其他).
- */
-export function normalizeTags(v: unknown): string[] {
+/** Align only classification labels; publication keeps entity identities and editors' other tags intact. */
+export function alignCategoryTags(tags: readonly string[], category: string | null): string[] {
+  const label = CATEGORIES.find((c) => c.key === category)?.label;
+  const otherTags = tags.filter((tag) => !(CATEGORY_TAGS as readonly string[]).includes(tag));
+  return label ? [label, ...otherTags] : otherTags;
+}
+
+/** Known model tags only, synonyms mapped, duplicates dropped, at most six; category alone owns its label. */
+export function normalizeTags(v: unknown, category: string | null): string[] {
   const raw = Array.isArray(v) ? v : typeof v === "string" ? v.split(/[,，]/g) : [];
   const tags: string[] = [];
   for (const x of raw) {
@@ -18,10 +22,7 @@ export function normalizeTags(v: unknown): string[] {
     const tag = TAG_SYNONYMS[t] ?? TAG_SYNONYMS[t.toLowerCase()] ?? t;
     if (tag && ALLOWED_TAGS.has(tag) && !tags.includes(tag)) tags.push(tag);
   }
-  const isCategory = (t: string) => (CATEGORY_TAGS as readonly string[]).includes(t);
-  const categoryIndex = tags.findIndex(isCategory);
-  const category = categoryIndex >= 0 ? tags[categoryIndex]! : CATEGORY_TAGS[CATEGORY_TAGS.length - 1]!;
-  return [category, ...tags.filter((t) => t !== category)].slice(0, 6);
+  return alignCategoryTags(tags, category).slice(0, 6);
 }
 
 /** The category boundaries the structure step reads, one line per category. */

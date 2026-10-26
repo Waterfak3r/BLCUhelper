@@ -12,6 +12,7 @@ import { analyzeArticle, buildMaterial, loadAnalyzeInput, normalizeStructure, St
 import { queueProcessing } from "@aihot/backend/jobs/content";
 import { QUEUES, stopBoss } from "@aihot/backend/jobs/queue";
 import { compactAnswerFirstSummary, enforceIdentity, MAX_BODY_CHARS, parseTranslateOutput } from "@aihot/backend/editorial/writing";
+import { normalizeTags } from "@aihot/backend/editorial/vocabulary";
 import { READER_WORDING } from "@aihot/industry/wording";
 import { ITEM_TYPES, IDENTITY_LEXICON } from "@aihot/industry/taxonomy";
 
@@ -86,6 +87,19 @@ const row = async (id: string) =>
   (await sql<{ selected: boolean; relevance: string; score: string | null; title_zh: string; reason_zh: string | null; category: string | null; tags: string[]; subjects: string[]; receipt_ids: string[]; output: Record<string, any> }[]>`
     SELECT selected, relevance, score, title_zh, reason_zh, category, tags, subjects, receipt_ids, output FROM analyses WHERE article_id = ${id} ORDER BY id DESC LIMIT 1`)[0]!;
 
+test("model tags follow category instead of voting for it, while retaining normalized non-category tags", () => {
+  assert.deepEqual(normalizeTags(["校园资讯", "教务考试", "本科生", "#本科生", "不存在的标签", "北京语言大学"], "international"),
+    ["国际交流", "本科生", "北京语言大学"]);
+  assert.deepEqual(normalizeTags("研究生，活动讲座,本科生", "academic"), ["教务考试", "研究生", "本科生"]);
+  assert.deepEqual(normalizeTags(["教务考试", "校园资讯", "本科生"], null), ["本科生"]);
+  assert.deepEqual(normalizeTags(["教务考试", "本科生"], "unknown"), ["本科生"]);
+  assert.deepEqual(normalizeTags([], null), []);
+  assert.deepEqual(normalizeTags([], "academic"), ["教务考试"]);
+  assert.deepEqual(normalizeTags(["本科生", "研究生", "留学生", "新生", "毕业生", "北京语言大学"], "academic"),
+    ["教务考试", "本科生", "研究生", "留学生", "新生", "毕业生"]);
+  assert.deepEqual(normalizeTags("志愿活动,活动讲座,研究生", "volunteer"), ["志愿活动", "研究生"]);
+});
+
 test("a selected item: prefilter, two scores, the content understanding and the structure", async () => {
   assert.ok(FLOOR >= 4 && FLOOR < T1 && T1 <= 97, "the cases need the understand floor below the T1 threshold, and a few points either side");
   const id = await article("CLEAR");
@@ -150,6 +164,11 @@ test("structure retains grounded conditions, rejects invented or unseen quotes, 
   ] };
   const base = { category: "academic", tags: [], subjects: [], fact: frame };
   const out = normalizeStructure(StructureSchema.parse(base), input);
+  for (const category of ["international", null, "unknown"]) {
+    const structure = normalizeStructure(StructureSchema.parse({ ...base, category, tags: ["校园资讯", "教务考试", "本科生"] }), input);
+    assert.equal(structure.category, category === "unknown" ? null : category);
+    assert.deepEqual(structure.tags, category === "international" ? ["国际交流", "本科生"] : ["本科生"]);
+  }
   assert.ok(buildMaterial(input).includes("Only available in the US."), "a condition after the old 7000-character cutoff reaches the model");
   assert.ok(buildMaterial(input).includes("后文未提供"));
   assert.equal(out.scope, "unknown", "an older result with a fact is not proof of single scope");

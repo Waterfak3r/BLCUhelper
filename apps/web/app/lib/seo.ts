@@ -3,7 +3,7 @@
 //; its address from SITE_URL.
 import type { MetaDescriptor } from "react-router";
 import { REPORT_NAMES, reportDateLabel, type ReportDetail, type StoryDetail, type TimelineFilters } from "@aihot/contracts/site";
-import { isCategoryKey, isChannelKey } from "@aihot/contracts/taxonomy";
+import { COLLEGE_KEYS, isCategoryKey, isChannelKey } from "@aihot/contracts/taxonomy";
 import { SITE, subjectAfter, withSubject } from "@aihot/site";
 
 /**
@@ -44,25 +44,27 @@ export function listPath(path: string, params: Record<string, string | number | 
   return qs ? `${path}?${qs}` : path;
 }
 
-/** The feed filters an address asks for; an unknown channel or category means none. */
+/** The feed filters an address asks for; unknown channel, category or college means none. */
 export function readFilters(params: URLSearchParams): TimelineFilters {
   const channel = params.get("channel") ?? "all";
   const category = params.get("category");
+  const college = COLLEGE_KEYS.find((key) => key === params.get("college")) ?? null;
   return {
     channel: isChannelKey(channel) ? channel : "all",
     category: category && isCategoryKey(category) ? category : null,
+    college,
     tag: params.get("tag")?.trim() || null,
   };
 }
 
 /** Feed filters as list address parameters: the default channel and unset filters are left out. */
 export function filterParams(f: TimelineFilters) {
-  return { channel: f.channel === "all" ? null : f.channel, category: f.category, tag: f.tag };
+  return { channel: f.channel === "all" ? null : f.channel, category: f.category, college: f.college, tag: f.tag };
 }
 
 /** Filter combinations are browsing views; the unfiltered feed and its archive pages remain indexable. */
 export function hasFeedFilters(filters: TimelineFilters | undefined): boolean {
-  return !!filters && (filters.channel !== "all" || !!filters.category || !!filters.tag);
+  return !!filters && (filters.channel !== "all" || !!filters.category || !!filters.college || !!filters.tag);
 }
 
 /** "Title · Site". */

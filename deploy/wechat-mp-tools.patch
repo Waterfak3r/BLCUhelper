@@ -489,7 +489,7 @@ index 867c13e..fe16560 100644
      ct_match = re.search(r'\bct\s*=\s*["\']?(\d+)["\']?', raw_html)
      if ct_match:
 diff --git a/backend/rss_feed.py b/backend/rss_feed.py
-index c7eaa71..1e6e7db 100644
+index c7eaa71..d074bda 100644
 --- a/backend/rss_feed.py
 +++ b/backend/rss_feed.py
 @@ -20,12 +20,10 @@ import hashlib
@@ -537,7 +537,16 @@ index c7eaa71..1e6e7db 100644
      if not author and path:
          try:
              meta = load_json(Path(path) / "metadata.json", {})
-@@ -224,10 +224,13 @@ def collect_items(account: str | None = None) -> list:
+@@ -213,6 +213,8 @@ def collect_items(account: str | None = None) -> list:
+     order: list = []
+ 
+     def push(raw, acc):
++        if account and acc and acc != account:
++            return
+         item = _normalize_item(raw, acc)
+         if not item:
+             return
+@@ -224,10 +226,13 @@ def collect_items(account: str | None = None) -> list:
          if key in merged:
              # 同一篇：补全缺失字段，保留更早拿到的那条
              exist = merged[key]
@@ -553,7 +562,18 @@ index c7eaa71..1e6e7db 100644
                  exist["published"] = item["published"]
              return
          merged[key] = item
-@@ -268,119 +271,33 @@ def _cdata(value: str) -> str:
+@@ -238,7 +243,9 @@ def collect_items(account: str | None = None) -> list:
+             push(raw, account)
+         for raw in history:
+             if isinstance(raw, dict) and raw.get("success"):
+-                push(raw, raw.get("account") or account)
++                raw_acc = str(raw.get("account") or "")
++                if not raw_acc or raw_acc == account:
++                    push(raw, raw_acc or account)
+     else:
+         for acc, arts in articles.items():
+             for raw in arts:
+@@ -268,119 +275,33 @@ def _cdata(value: str) -> str:
      return "<![CDATA[%s]]>" % str(value or "").replace("]]>", "]]]]><![CDATA[>")
  
  
@@ -681,7 +701,7 @@ index c7eaa71..1e6e7db 100644
          if item.get("author"):
              parts.append("      <dc:creator>%s</dc:creator>" % _text(item["author"]))
          if item["cover"]:
-@@ -389,7 +306,7 @@ def render_feed(items: list, title: str, description: str,
+@@ -389,7 +310,7 @@ def render_feed(items: list, title: str, description: str,
                  % _attr(item["cover"])
              )
          if fulltext:

@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { correctReportClassification } from "../reports/correct.ts";
 import type { AdminContentChain, AdminContentRow, AdminPublication, AdminPresentationRefresh, AdminRerun, BeforeJson } from "@aihot/contracts/admin";
-import { ARTICLE_ID_PATTERN, CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
+import { ARTICLE_ID_PATTERN, CATEGORY_KEYS, type CategoryKey } from "@aihot/contracts/taxonomy";
 import { sql, type Db, type Tx } from "../db.ts";
 import { enqueue, QUEUES } from "../jobs/queue.ts";
 import { needsGrouping, queueProcessing } from "../jobs/content.ts";
@@ -176,14 +176,15 @@ export async function correctPublicationDate(id: string, input: { version: numbe
   });
 }
 
-export async function searchContent(q: string): Promise<BeforeJson<AdminContentRow>[]> {
+export async function searchContent(q: string, category: CategoryKey | null): Promise<BeforeJson<AdminContentRow>[]> {
   const term = q.trim();
-  if (!term) return [];
+  if (!term && category === null) return [];
   const read = (where: ReturnType<typeof sql>) => sql<BeforeJson<AdminContentRow>[]>`
     SELECT a.id, coalesce(p.title, a.title) AS title, a.url, s.name AS source, a.discovered_at, a.processing_state,
            p.visibility, p.selected, p.score
     FROM articles a JOIN sources s ON s.id = a.source_id LEFT JOIN publications p ON p.article_id = a.id
-    WHERE ${where} ORDER BY a.discovered_at DESC, a.id LIMIT 50`;
+    WHERE (${where}) ${category === null ? sql`` : sql`AND p.category = ${category}`} ORDER BY a.discovered_at DESC, a.id LIMIT 50`;
+  if (!term) return read(sql`true`);
   // Exact lookups use the identity indexes; a title search must not force a full-table join for an ID.
   if (ARTICLE_ID_PATTERN.test(term)) {
     const found = await read(sql`a.id = ${term}`);
@@ -291,7 +292,7 @@ const FieldsSchema = z
     title: z.string().min(1).max(300),
     summary: z.string().max(2000),
     reason: z.string().max(1000),
-    category: z.enum(CATEGORY_KEYS as unknown as [string, ...string[]]),
+    category: z.enum(CATEGORY_KEYS as unknown as [string, ...string[]]).nullable(),
     tags: z.array(z.string().max(60)).max(20),
     score: z.number().min(0).max(100).nullable(),
     selected: z.boolean(),

@@ -7,7 +7,7 @@ import { beijingTime } from "@aihot/contracts/time";
 import { cachedPage, loadOr404 } from "../lib/api.server";
 import { pageReuse } from "../lib/page-reuse";
 import { filterParams, hasFeedFilters, itemListLd, listPath, pageMeta, readFilters } from "../lib/seo";
-import { ActiveFilters, CategoryTabs, FeedBar, SearchField } from "../features/feed/Filters";
+import { ActiveFilters, CategoryTabs, CollegeSelect, FeedBar, SearchField } from "../features/feed/Filters";
 import { PillTabs } from "../components/ui/Tabs";
 import { DayList, Pagination } from "../features/feed/DayList";
 import { EmptyState } from "../components/ui/Page";
@@ -72,11 +72,11 @@ export default function AllPage() {
   const navigation = useNavigation();
   const f = data.filters;
   const busy = navigation.state === "loading" && navigation.location?.pathname === "/all";
-  const { channel, category } = filterParams(f);
-  const keep = { channel, category };
+  const keep = filterParams(f);
   const searchTabHref = (tab: "time" | "relevance") => {
     const sp = new URLSearchParams(params);
     sp.delete("page");
+    sp.delete("cursor");
     if (tab === "relevance") sp.set("tab", "relevance");
     else sp.delete("tab");
     return `/all?${sp}`;
@@ -97,7 +97,7 @@ export default function AllPage() {
       {/* Phones: the feed bar, or for a search the query (tap to change it) and back to 全部. */}
       {f.q ? (
         <PhoneBar
-          back={{ to: "/all", label: "全部" }}
+          back={{ to: listPath("/all", keep), label: "全部" }}
           center={
             <button type="button" onClick={(event) => openSearch(f.q ?? "", event.currentTarget)} className="flex h-11 min-w-0 max-w-full items-center gap-2 rounded-full bg-well px-3.5 text-[15px] text-ink ring-1 ring-inset ring-line-soft">
               <IconSearch size={16} className="shrink-0 text-ink-4" />
@@ -106,15 +106,26 @@ export default function AllPage() {
           }
         />
       ) : (
-        <FeedBar base="/all" category={f.category} channel={f.channel} />
+        <FeedBar base="/all" category={f.category} channel={f.channel} college={f.college} />
       )}
-      <ActiveFilters base="/all" category={f.category} channel={f.channel} tag={f.tag} />
+      <ActiveFilters base="/all" category={f.category} channel={f.channel} college={f.college} tag={f.tag} />
 
       {/* Desktop, as on 精选: the title, then one filter row with the search field aligned on the right. */}
       <div className="hidden lg:block">
-        <h1 className="text-[24px] font-semibold leading-[1.3] text-ink">{title ?? ALL_TITLE}</h1>
-        <div className="mb-5 mt-4 flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-[24px] font-semibold leading-[1.3] text-ink">{title ?? ALL_TITLE}</h1>
+          {f.q && (
+            <Link
+              to={listPath("/all", keep)}
+              className="text-[13px] font-medium text-accent hover:underline"
+            >
+              清除搜索
+            </Link>
+          )}
+        </div>
+        <div className="mb-5 mt-4 flex flex-wrap items-center justify-between gap-4">
           <CategoryTabs base="/all" category={f.category} channel={f.channel} layoutId="all-cat-desk" className="min-w-0" />
+          <CollegeSelect base="/all" college={f.college} />
           <SearchField defaultValue={f.q ?? ""} keep={keep} />
         </div>
       </div>
@@ -126,11 +137,14 @@ export default function AllPage() {
             layoutId="all-search-sort"
             label="搜索排序"
             active={f.tab}
-            items={(["time", "relevance"] as const).map((t) => ({ key: t, label: t === "time" ? "按时间（搜标题和摘要）" : "按相关度（含正文）", to: searchTabHref(t) }))}
+            items={(["time", "relevance"] as const).map((t) => ({ key: t, label: t === "time" ? "按时间" : "按相关度", to: searchTabHref(t) }))}
           />
           <span className="text-[12px] text-ink-4">
             找到 <span className="num">{data.total >= 2000 ? "2000+" : data.total}</span> 条 · 更新于 <span className="num">{updated}</span>
           </span>
+          <p className="w-full text-[12px] leading-relaxed text-ink-4">
+            按时间检索标题、来源与摘要；按相关度还会检索正文。
+          </p>
         </div>
       )}
 
@@ -147,7 +161,7 @@ export default function AllPage() {
                 ) : undefined
               }
             >
-              {f.q ? "换个说法，或者去掉筛选再试。" : "这个筛选下暂时没有内容。"}
+              {f.q ? "换个关键词、缩短搜索词，或清空筛选条件再试。" : "当前筛选条件下暂无动态。"}
             </EmptyState>
           </div>
         ) : (

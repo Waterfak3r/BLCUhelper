@@ -14,11 +14,36 @@
 export const CATEGORIES = [
   { key: "academic", tagColor: "indigo", label: "教务考试", feedLabel: "教务考试", section: "教务考试", guide: "选课、课程安排、考试、成绩与学籍事项。包括开课计划、考试通知、成绩发布、转专业、休学等。跨学院或需资格的优先，纯宣传不归此。" },
   { key: "funding", tagColor: "turquoise", label: "奖助评优", feedLabel: "奖助评优", section: "奖助评优", guide: "奖学金、助学金、评优及其申请和公示。包括国家奖、校级奖、专项资助、优秀学生评选结果。资格、截止、公示名单优先；已结束的回顾不自动入选。" },
-  { key: "opportunities", tagColor: "orange", label: "升学就业交流", feedLabel: "升学就业交流", section: "升学就业交流", guide: "招聘实习、升学、访学与交换项目。包括校招信息、实习岗位、考研保研、出国交流、交换生计划。资格条件、时间节点、申请入口优先。" },
-  { key: "events", tagColor: "violet", label: "活动讲座", feedLabel: "活动讲座", section: "活动讲座", guide: "可参与的讲座、比赛、社团和校园活动。包括学术讲座、文化节、体育比赛、社团招新、志愿服务。时间、地点、报名方式优先；纯宣传口径弱化。" },
+  { key: "opportunities", tagColor: "orange", label: "升学就业", feedLabel: "升学就业", section: "升学就业", guide: "考研保研、学位升学招生、招聘实习与求职。包括境内外独立学位招生、校招信息、实习岗位。资格条件、时间节点、申请入口优先；学生交流项目归国际交流，不因地点海外就将一般招聘实习归国际交流。" },
+  { key: "international", tagColor: "blue", label: "国际交流", feedLabel: "国际交流", section: "国际交流", guide: "校际交换、访学研修、国际暑校、联合培养、港澳台交流等学生交流项目的申请选派通知。附带资助仍归此；独立学位招生、一般招聘实习归升学就业，独立奖助申请归奖助评优，普通讲座分享会归活动讲座。" },
+  { key: "events", tagColor: "violet", label: "活动讲座", feedLabel: "活动讲座", section: "活动讲座", guide: "可参与的讲座、比赛、社团和校园活动。包括学术讲座、文化节、体育比赛、社团招新。时间、地点、报名方式优先；纯宣传口径弱化；志愿服务招募与公益活动归志愿活动。" },
+  { key: "volunteer", tagColor: "red", label: "志愿活动", feedLabel: "志愿活动", section: "志愿活动", guide: "校内外志愿服务、公益活动、志愿者招募与服务时长认定。包括大型赛会志愿、支教帮扶、社区服务、无偿献血、校园志愿岗位招募及名单公示。招募要求、服务时间、报名入口、时长认定优先；普通文体社团活动归活动讲座。" },
   { key: "services", tagColor: "green", label: "校园服务", feedLabel: "校园服务", section: "校园服务", guide: "网络、校园卡、场馆、住宿和办事服务变更。包括系统维护、卡务调整、场馆开放时间、宿舍安排、办事流程变化。影响范围、替代方案、时间优先。" },
   { key: "campus", tagColor: "purple", label: "校园资讯", feedLabel: "校园资讯", section: "校园资讯", guide: "不属于上述事项的校园事实消息；纯宣传不自动精选。包括校情通报、天气提醒、设施使用须知、行政通知等。事实要素优先，口号式宣传低优先。" },
 ] as const satisfies ReadonlyArray<{ key: string; tagColor: string; label: string; feedLabel?: string; section: string; guide: string; commentary?: true }>;
+
+/** 官方教学科研单位的发布来源归属；不表示文章适用资格，不包含校级职能与团学来源。 */
+export const COLLEGES = [
+  { key: "chinastudies", label: "汉学与中国学学院（一带一路研究院）", sourceIds: ["blcu-chinastudies-notices", "blcu-get-lectures", "blcu-chinastudies-rss", "blcu-get-rss"] },
+  { key: "cics", label: "国际中文学院", sourceIds: ["blcu-cics-notices", "blcu-cics-lectures", "blcu-cics-rss"] },
+  { key: "yyzw", label: "应用中文学院", sourceIds: ["blcu-yyzw-notices", "blcu-yyzw-rss"] },
+  { key: "irs", label: "外国语言文化学院（区域国别研究院）", sourceIds: ["blcu-irs-rss"] },
+  { key: "seis", label: "英语和高级翻译学院", sourceIds: ["blcu-seis-notices", "blcu-seis-rss"] },
+  { key: "soe", label: "教育学院", sourceIds: ["blcu-soe-notices", "blcu-soe-rss"] },
+  { key: "wenxueyuan", label: "文学院、中华文化研究院", sourceIds: ["blcu-wenxueyuan-rss"] },
+  { key: "sjc", label: "国际政治与传播学院", sourceIds: ["blcu-sjc-notices"] },
+  { key: "xxkx", label: "信息科学学院", sourceIds: ["blcu-xxkx-notices", "blcu-xxkx-rss"] },
+  { key: "bs", label: "商学院、经济研究院", sourceIds: ["blcu-bs-notices", "blcu-bs-rss"] },
+  { key: "marxism", label: "马克思主义学院", sourceIds: ["blcu-marxism-notices", "blcu-marxism-rss"] },
+  { key: "ysh", label: "艺术学院", sourceIds: ["blcu-ysh-notices", "blcu-ysh-rss"] },
+  { key: "sllr", label: "语言科学与资源学院（语言科学研究院）", sourceIds: ["blcu-sllr-notices", "blcu-sllr-rss"] },
+  { key: "xlrzkx", label: "心理与认知科学学院（生命健康研究院）", sourceIds: ["blcu-xlrzkx-notices", "blcu-xlrzkx-admissions", "blcu-xlrzkx-student-activities", "blcu-xlrzkx-rss"] },
+  { key: "cec", label: "继续教育学院（教育部出国留学培训部）、网络教育学院", sourceIds: ["blcu-cec-notices"] },
+  { key: "ic", label: "国际学院", sourceIds: ["blcu-ic-notices", "blcu-ic-rss"] },
+  { key: "tyb", label: "体育教学部", sourceIds: ["blcu-tyb-notices", "blcu-tyb-rss"] },
+  { key: "icicc", label: "中国书法国际传播研究院", sourceIds: ["blcu-icicc-rss"] },
+  { key: "lacic", label: "语言文化国际传播联合研究院", sourceIds: ["blcu-lacic-lectures"] },
+] as const satisfies ReadonlyArray<{ key: string; label: string; sourceIds: readonly string[] }>;
 
 /**
  * 这个行业最受关注的一类发布（校园站没有固定“发布”类）：日报报头的数字、改分类后修订已出的报告都按它数。
@@ -40,7 +65,7 @@ export const ITEM_TYPES = ["required_action", "opportunity", "service_change", "
 
 /** 每篇资料的第一个标签必须是这些“分类标签”之一。 */
 export const CATEGORY_TAGS = [
-  "教务考试", "奖助评优", "升学就业交流", "活动讲座", "校园服务", "校园资讯",
+  "教务考试", "奖助评优", "升学就业", "国际交流", "活动讲座", "志愿活动", "校园服务", "校园资讯",
 ] as const;
 
 /** 可选的主题标签。 */

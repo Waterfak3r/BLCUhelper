@@ -53,7 +53,7 @@ test("a public category takes in the categories the site publishes as it, and on
 
 test("the website filters by each of its own categories", async () => {
   for (const key of CATEGORY_KEYS) {
-    const timeline = await loadTimeline({ channel: "all", category: key, tag: T, limit: 40, now });
+    const timeline = await loadTimeline({ channel: "all", category: key, college: null, tag: T, limit: 40, now });
     assert.deepEqual(ours(timeline.cards.map((c) => c.item.title)), [title(key)], key);
   }
 });
@@ -91,4 +91,26 @@ test("HTTP, Agent, MCP and discovery agree on the public categories and returned
       assert.ok(items.every((item) => item.category === key));
     }
   }
+});
+
+test("site college filters validate the enum, echo null or key and suppress unscoped hot content", async () => {
+  for (const endpoint of ["timeline", "pool"]) {
+    for (const value of ["unknown", "", "信息科学学院"]) {
+      const invalid = await app.inject(`/api/site/${endpoint}?college=${encodeURIComponent(value)}`);
+      assert.equal(invalid.statusCode, 400);
+      assert.equal(invalid.json().code, "invalid_request");
+    }
+    const unfiltered = await app.inject(`/api/site/${endpoint}?tag=${T}`);
+    assert.equal(unfiltered.statusCode, 200);
+    assert.equal(unfiltered.json().filters.college, null);
+    const filtered = await app.inject(`/api/site/${endpoint}?college=xxkx&tag=${T}`);
+    assert.equal(filtered.statusCode, 200);
+    assert.equal(filtered.json().filters.college, "xxkx");
+    if (endpoint === "timeline") {
+      assert.deepEqual(filtered.json().cards, []);
+      assert.equal(filtered.json().hot, null);
+    } else assert.deepEqual(filtered.json().items, []);
+  }
+  const invalidGroup = await app.inject("/api/site/groups/absent/reports?college=unknown");
+  assert.equal(invalidGroup.statusCode, 400);
 });

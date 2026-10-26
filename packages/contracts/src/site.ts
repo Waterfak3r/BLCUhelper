@@ -1,6 +1,6 @@
 // First-party site API (/api/site/*). Not a public API: it may evolve with the website,
 // but it is served from the same public read layer as v1, RSS and MCP.
-import type { CategoryKey, ChannelKey } from "./taxonomy.ts";
+import type { CategoryKey, ChannelKey, CollegeKey } from "./taxonomy.ts";
 import { isoWeekRange, monthDay } from "./time.ts";
 
 export interface SourceRef {
@@ -104,6 +104,7 @@ export interface TimelineFilters {
   channel: ChannelKey;
   category: CategoryKey | null;
   tag: string | null;
+  college: CollegeKey | null;
 }
 
 export interface TimelineResponse {

@@ -48,8 +48,8 @@ export const SELECTION = {
 | `caseId` | 唯一编号 |
 | `material` | 标题、原标题、发布时间、信源名、正文（中文正文放 `bodyZh`，原文放 `bodyOriginal`，有一个就行） |
 | `sourceFacts` | 信源类型、分级、是否一手（线上只有 `T1` 算一手，标注时保持一致）、语言。分级决定用哪个门槛 |
-| `samplingContext` | 可选。`benchmarkSplit` 分开发集和留出集，`samplingStratum` 是你自己的分组（比如“新规”“判决”“营销”），看错在哪一类 |
-| `gold.decision` | `select` 该选，`reject` 不该选，`either` 两可（不计入准确率） |
+| `samplingContext` | 可选。`benchmarkSplit` 分开发集和留出集，`samplingStratum` 建议直接使用规范的英文分类 key（`academic`、`funding`、`opportunities`、`international`、`events`、`volunteer`、`services`、`campus`）作为分层标识，以便清点八类覆盖情况；也允许业务自定义分组（如“通知”“讲座”），但不得凭信源名主观臆测分类 |
+| `gold.decision` | `select` 该选，`reject` 不该选，`either` 两可（不计入准确率）。真实候选样本必须经人工核验并标注 `gold.decision` 后才能作为金标使用；无 decision 的行会被预检及评测直接拒绝 |
 
 `industry/gold.example.jsonl` 有两条示例。
 
@@ -59,6 +59,20 @@ export const SELECTION = {
 - 分出一部分做**留出集**（`benchmarkSplit: "holdout"`），调提示词只看开发集，最后再用留出集检查一遍，免得把提示词调成只会做这几道题。
 - 标注的人最好就是以后读这个站的人，或者和他们口味一致的人。
 - 评测只跑预筛和两次评分，不含第 6 步的去重：按这条资料本身该不该选来标，不要因为同一件事已经选过另一篇就标“不该选”。
+
+### 离线样本预检（无需 .env 与模型）
+
+在运行正式评测前，可以使用 `--check-only` 对样本文件进行离线安全预检。该模式不需要 `.env` 文件、不连接数据库、不发起模型调用、不写入评测报告文件，也不导入 SelectBench：
+
+```bash
+node scripts/eval-selection.ts --check-only --gold .data/gold.jsonl
+```
+
+预检只做只读校验与样本盘点，标准输出为结构化 JSON：
+- **样本总数与分布**：统计 `sourceDistribution`（信源分布）、`benchmarkSplitDistribution`（开发集/留出集切分）与 `samplingStratumDistribution`（抽样分层分布）；
+- **正文非空统计**：统计具备 `bodyOriginal` 或 `bodyZh` 的条目数及缺失正文的 `caseId` 列表（`missingTextCaseIds`）。注意：正文非空仅代表字段有内容，其完整性（`completeness: "not_verified"`）仍须人工比对原文核验；
+- **分类 key 覆盖清点**：当且仅当 `samplingStratum` 填写真实分类 key 时清点已覆盖（`covered`）与未覆盖（`uncovered`）的校园分类，以及其他自定义分层（`nonCategoryStrata`）。这**仅代表取样覆盖度**，不是分类准确率指标，金标 Schema 本身并不提供 `category` 金标字段；
+- **严格校验**：任何缺失 `gold.decision`（或非合法枚举）的行会直接报错拒绝。抓取的原始候选集若未完成维护者核验与决策标注，不能直接作为金标集运行。
 
 ### 2. 跑评测
 

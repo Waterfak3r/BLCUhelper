@@ -2,7 +2,7 @@
 // already up — the field is focused inside the same tap, which iOS requires — and searches 全部动态
 // (/all?q=…). Below the field: this browser's recent searches, topics to browse and what is hot now.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Form, Link, useLocation, useNavigation } from "react-router";
+import { Form, Link, useLocation, useNavigate, useNavigation, useSearchParams } from "react-router";
 import type { SearchSuggestions } from "@aihot/contracts/site";
 import { IconClose, IconSearch } from "../../components/icons";
 import { inNav } from "../../components/shell/nav";
@@ -57,7 +57,10 @@ export function SearchOverlay() {
   const [hasText, setHasText] = useState(false);
   const recent = useRecentSearches();
   const navigation = useNavigation();
+  const navigate = useNavigate();
   const { key } = useLocation();
+  const [params] = useSearchParams();
+  const keep = ["category", "channel", "college", "tag", "tab"].map((name) => ({ name, value: params.get(name) }));
   const [more, setMore] = useState<Awaited<ReturnType<typeof loadSuggestions>> | null>(null);
 
   useModal({ open: shown, panel, initialFocus: input, returnFocus: opener, onClose: close });
@@ -122,14 +125,24 @@ export function SearchOverlay() {
           const q = input.current?.value.trim() ?? "";
           if (!q) {
             e.preventDefault();
+            if (params.get("q")) {
+              close();
+              const sp = new URLSearchParams(params);
+              sp.delete("q");
+              sp.delete("tab");
+              sp.delete("page");
+              sp.delete("cursor");
+              navigate(`/all${sp.toString() ? `?${sp}` : ""}`);
+            }
             return;
           }
           addRecentSearch(q);
         }}
         className="flex h-14 shrink-0 items-center gap-1 pl-4 pr-1 pt-[env(safe-area-inset-top)]"
       >
+        {keep.map(({ name, value }) => value ? <input key={name} type="hidden" name={name} value={value} /> : null)}
         <label className="relative flex-1">
-          <span className="sr-only">搜索标题、摘要和正文</span>
+          <span className="sr-only">搜索全站动态</span>
           <IconSearch size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-4" />
           <input
             ref={input}
@@ -137,7 +150,7 @@ export function SearchOverlay() {
             type="search"
             onInput={(e) => setHasText(!!e.currentTarget.value)}
             tabIndex={shown ? 0 : -1}
-            placeholder="搜索标题、摘要和正文"
+            placeholder="搜索标题、来源、摘要或正文"
             maxLength={200}
             autoComplete="off"
             enterKeyHint="search"
@@ -166,6 +179,9 @@ export function SearchOverlay() {
 
       {shown && (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(24px,env(safe-area-inset-bottom))]">
+          <p className="pt-3 text-[13px] leading-relaxed text-ink-4">
+            支持搜索学院与部门名（如“研究生院”“学生处”）；发布单位不代表适用对象，具体要求请看正文。
+          </p>
           {recent.length > 0 && (
             <section className="pt-3">
               <div className="flex items-center justify-between">
@@ -175,11 +191,15 @@ export function SearchOverlay() {
                 </button>
               </div>
               <div className="mt-1.5 flex flex-wrap gap-2">
-                {recent.map((q) => (
-                  <Link key={q} to={`/all?q=${encodeURIComponent(q)}`} onClick={() => addRecentSearch(q)} className={`${chip} bg-surface text-ink-2 ring-1 ring-inset ring-line active:bg-bg-sunk`}>
-                    <span className="truncate">{q}</span>
-                  </Link>
-                ))}
+                {recent.map((q) => {
+                  const sp = new URLSearchParams(keep.flatMap(({ name, value }) => value ? [[name, value]] : []));
+                  sp.set("q", q);
+                  return (
+                    <Link key={q} to={`/all?${sp}`} onClick={() => addRecentSearch(q)} className={`${chip} bg-surface text-ink-2 ring-1 ring-inset ring-line active:bg-bg-sunk`}>
+                      <span className="truncate">{q}</span>
+                    </Link>
+                  );
+                })}
               </div>
             </section>
           )}

@@ -66,7 +66,7 @@ test('independent selected sources retain identity and their own cards across pu
   assert.deepEqual(new Set(selected.map((x: {id:string})=>x.id)),new Set([firstOwn,laterOwn,official]));
   assert.equal((await sql`SELECT count(*) AS n FROM analyses`)[0]!.n,analysisCount,'republication reuses the judgement');
   assert.deepEqual(await sql`SELECT article_id,fact_id,role,manual FROM fact_articles WHERE fact_id=${fact!.id} ORDER BY article_id`,before);
-  const filters = {channel:'all' as const,category:null,tag:T,now:new Date()};
+  const filters = {channel:'all' as const,category:null,college:null,tag:T,now:new Date()};
   const timeline = await loadTimeline(filters);
   assert.deepEqual(timeline.cards.map(c=>c.item.id),[laterOwn,official,firstOwn]);
   assert.equal(timeline.cards[1]!.anchorAt,new Date(+now-1_800_000).toISOString(),'independent arrival does not date the ordinary reading group');

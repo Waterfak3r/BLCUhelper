@@ -1,7 +1,7 @@
 // Public read layer, item level. Every exit (site API, v1, RSS, MCP, sitemap) reads
 // items through these columns and views; which rows are public is decided by scope.ts.
-import { CATEGORY_KEYS, toPublicApiCategory, type CategoryKey, type ChannelKey, type PublicApiCategoryKey } from "@aihot/contracts/taxonomy";
-import type { FeedItemSummary, ItemSummary, MediaView, XPostView } from "@aihot/contracts/site";
+import { CATEGORY_KEYS, COLLEGES, toPublicApiCategory, type CategoryKey, type ChannelKey, type CollegeKey, type PublicApiCategoryKey } from "@aihot/contracts/taxonomy";
+import type { FeedItemSummary, ItemSummary, MediaView, TimelineFilters, XPostView } from "@aihot/contracts/site";
 import { POLICY } from "@aihot/site";
 import { sql, type Db } from "../db.ts";
 import { isChineseText } from "../lib/text.ts";
@@ -84,6 +84,14 @@ export function channelCondition(channel: ChannelKey | null | undefined) {
 export function categoryCondition(category: CategoryKey | null | undefined) {
   if (!category) return sql``;
   return sql`AND p.category = ${category}`;
+}
+
+/** Publisher affiliation only: never infer a college from a title, name or audience tag. */
+export function collegeCondition(college: CollegeKey | null | undefined) {
+  if (!college) return sql``;
+  const sourceIds = COLLEGES.find((c) => c.key === college)?.sourceIds;
+  if (!sourceIds?.length) return sql`AND false`;
+  return sql`AND p.source_id IN ${sql(sourceIds)}`;
 }
 
 /** The public API's, RSS's and MCP's filter: every category the site publishes as this one (PUBLIC_CATEGORIES). */
@@ -203,12 +211,13 @@ export function exportTranslation(a: { language?: string | null; body_text?: str
  * For listed rows that are selected but yield their fact's seat: the report holding it, by row id.
  * (The home timeline folds these into reading groups; flat lists say which report stands for them.)
  */
-export async function seatHolders(rows: ItemRow[], now: Date, db: Db = sql): Promise<Map<string, { id: string; title: string }>> {
+export async function seatHolders(rows: ItemRow[], now: Date, db: Db = sql, filters?: TimelineFilters): Promise<Map<string, { id: string; title: string }>> {
   const yielding = rows.filter((r) => r.selected && !r.seat && r.fact_id !== null);
   if (!yielding.length) return new Map();
   const holders = await db<{ fact_id: number; id: string; title: string }[]>`
     SELECT p.fact_id, p.article_id AS id, p.title FROM publications p
-    WHERE p.fact_id IN ${db([...new Set(yielding.map((r) => r.fact_id!))])} AND ${seatedCondition(now)} AND ${foldableSelectionCondition()}`;
+    WHERE p.fact_id IN ${db([...new Set(yielding.map((r) => r.fact_id!))])} AND ${seatedCondition(now)} AND ${foldableSelectionCondition()}
+      ${filters ? sql`${channelCondition(filters.channel)} ${categoryCondition(filters.category)} ${tagCondition(filters.tag)} ${collegeCondition(filters.college)}` : sql``}`;
   const byFact = new Map(holders.map((h) => [Number(h.fact_id), { id: h.id, title: h.title }]));
   return new Map(yielding.flatMap((r) => (byFact.has(Number(r.fact_id)) ? [[r.id, byFact.get(Number(r.fact_id))!] as const] : [])));
 }
