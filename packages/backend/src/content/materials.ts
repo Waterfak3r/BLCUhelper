@@ -9,6 +9,7 @@ import { groupingReset, reconcileMaterialSource } from "./provenance.ts";
 import { emit } from "../modules.ts";
 import { rebaseTranslation } from "./presentation.ts";
 import { audit } from "../audit.ts";
+import { safeAttachments } from "./attachments.ts";
 
 export interface MediaItem {
   kind: "image" | "video";
@@ -233,6 +234,9 @@ async function upsertIn(db: Db, m: MaterialInput): Promise<MaterialResult> {
     publishedAt: m.publishedAt && Number.isFinite(m.publishedAt.getTime()) ? m.publishedAt : null,
     sourceUpdatedAt: m.sourceUpdatedAt && Number.isFinite(m.sourceUpdatedAt.getTime()) ? m.sourceUpdatedAt : null,
   };
+  if (m.raw && typeof m.raw === "object" && !Array.isArray(m.raw) && "attachments" in m.raw && Array.isArray(m.raw.attachments)) {
+    m.raw = { ...m.raw, attachments: safeAttachments(m.raw.attachments, m.url) };
+  }
   const identityKey = identityKeyFor(m);
   const discoveredAt = m.discoveredAt ?? new Date();
   const title = collapseWhitespace(m.title).slice(0, 1000) || m.url;
@@ -284,6 +288,14 @@ async function upsertIn(db: Db, m: MaterialInput): Promise<MaterialResult> {
   // between the two sources' versions on every fetch. Only the article's own source revises it.
   if (existing!.source_id !== m.sourceId) {
     return unchanged;
+  }
+  // Observed publisher references are presentation metadata, not paid semantic input.
+  // Missing attachments means no page read; an explicit [] replaces the previous list.
+  if (m.raw && typeof m.raw === "object" && "attachments" in m.raw && Array.isArray(m.raw.attachments)) {
+    await db`UPDATE articles SET raw =
+      (CASE WHEN jsonb_typeof(raw)='object' THEN raw ELSE '{}'::jsonb END) ||
+      ${db.json({ attachments: safeAttachments(m.raw.attachments, m.url) })}::jsonb, updated_at=now()
+      WHERE id=${existing!.id}`;
   }
   // Recover source precision only when the new reading describes the stored instant. No guessed
   // midnight heuristic and no paid reanalysis for an unchanged article.

@@ -12,6 +12,8 @@ import { extractArticleBody, extractFromUrl, readable } from "@aihot/backend/con
 import { upsertMaterial } from "@aihot/backend/content/materials";
 import { jinaRead } from "@aihot/backend/providers/jina";
 import { fetchDetail, fetchWebList } from "@aihot/backend/sources/web-list";
+import { collectSource } from "@aihot/backend/sources/collect";
+import { stopBoss } from "@aihot/backend/jobs/queue";
 
 const T = tag();
 const sourceId = `error-page-${T}`;
@@ -43,6 +45,7 @@ const server = http.createServer((req, res) => {
   if (req.url === "/article") return void res.end(html("Password autofill in browsers", autofill));
   if (req.url === "/login") return void res.end(signInPage);
   if (req.url === "/brand/register/") return void res.end(html("The certified products register", prose));
+  if (req.url === "/redirect-listing") return void res.end('<html><body><article><a href="/redirect">Read more</a></article></body></html>');
   if (req.url === "/listing") return void res.end(`<html><body>
     <article><a href="/article">Password autofill in browsers</a></article>
     <nav><a href="/login">Log in</a><a href="/signup">Sign up</a></nav>
@@ -58,7 +61,7 @@ before(async () => {
   await sql`INSERT INTO sources(id,name,kind) VALUES (${sourceId},'Error page regression','rss')`;
   await sql`UPDATE budgets SET per_minute=1000,per_hour=1000,per_day=1000 WHERE service='jina'`;
 });
-after(async () => { server.close(); await closeDb(); });
+after(async () => { server.close(); await stopBoss(); await closeDb(); });
 
 test("soft 404 and security interstitials cannot become native article bodies", () => {
   for (const page of [html("404 Not Found | Example", navigation), html("Just a moment...", challenge),
@@ -106,10 +109,10 @@ test("a redirect to a sign-in form cannot become the body", async () => {
   assert.equal(await extractFromUrl(`${base}/redirect`, `article:${T}:signin`, {}, { paidFallback: false }), null);
   // An article that merely mentions signing in and passwords is still an article.
   const got = await extractFromUrl(`${base}/article`, `article:${T}:autofill`, {}, { paidFallback: false });
-  assert.ok(got?.text.includes("password managers"), "text about sign-in forms is not a sign-in redirect");
+  assert.ok(got?.body?.text.includes("password managers"), "text about sign-in forms is not a sign-in redirect");
   // A page that is itself on such a path and only gains a trailing slash was not sent to sign in.
   const registry = await extractFromUrl(`${base}/brand/register`, `article:${T}:registry`, {}, { paidFallback: false });
-  assert.ok(registry?.text.includes("real report"), "a redirect between two addresses of the same page is no sign-in redirect");
+  assert.ok(registry?.body?.text.includes("real report"), "a redirect between two addresses of the same page is no sign-in redirect");
 });
 
 // A listing's navigation links to the site's sign-in and registration pages; they are not posts.
@@ -117,4 +120,40 @@ test("a listing's sign-in links are not articles", async () => {
   const source = { id: sourceId, config: { url: `${base}/listing`, parseMode: "html", itemSelector: "a[href]", linkSelector: "a[href]" } } as never;
   const candidates = await fetchWebList(source);
   assert.deepEqual(candidates.map((c) => c.url).sort(), [`${base}/article`]);
+});
+
+test("a detail login redirect preserves stored references and never supplies the form's metadata or body", async () => {
+  const id = `${sourceId}-redirect`;
+  const config = { url: `${base}/redirect-listing`, parseMode: "html", itemSelector: "article", linkSelector: "a",
+    detail: { maxFetches: 1, titleSelector: "h1", titleAuthoritative: true, publishedAtSelector: "time", publishedAtAuthoritative: true, summarySelector: 'meta[name="description"]' } };
+  await sql`INSERT INTO sources(id,name,kind,participation_mode,config,cursor,next_fetch_at)
+    VALUES (${id},'Redirect detail','web_list','editorial',${sql.json(config)},${sql.json({ initializedAt: new Date().toISOString() })},'2100-01-01')`;
+  const attachments = [{ name: "Publisher form", url: "https://official.example/original.pdf" }];
+  const { articleId } = await upsertMaterial({ sourceId: id, url: `${base}/redirect`, title: "Actual publisher headline", via: "fetch", raw: { attachments } });
+  const source = { id, config } as never;
+  const detail = await fetchDetail(`${base}/redirect`, source, { title: true, date: true, summary: true, body: true });
+  assert.deepEqual(detail, { title: null, summary: null, publishedAt: null, publicationTime: null, body: null, attachments: null });
+  assert.equal((await collectSource(id)).status, "ok");
+  const [row] = await sql`SELECT title,excerpt,published_at,body_status,body_text,body_html,raw FROM articles WHERE id=${articleId}`;
+  assert.equal(row!.title, "Actual publisher headline");
+  assert.equal(row!.excerpt, null);
+  assert.equal(row!.published_at, null);
+  assert.notEqual(row!.body_status, "ok");
+  assert.equal(row!.body_text, null);
+  assert.equal(row!.body_html, null);
+  assert.deepEqual(row!.raw.attachments, attachments);
+  assert.equal(await extractArticleBody(articleId), "unconfirmed");
+  assert.deepEqual((await sql`SELECT raw FROM articles WHERE id=${articleId}`)[0]!.raw.attachments, attachments);
+});
+
+test("a native login redirect does not discard metadata already obtained through the existing Reader path", async () => {
+  readerPages.redirect = "Title: Publisher notice\nPublished Time: 2026-10-01T08:00:00Z\nMarkdown Content:\n# Publisher headline\n\nA publisher-supplied notice.";
+  const source = { id: `${sourceId}-reader-redirect`, config: { url: "https://r.jina.ai/https://publisher.example/list",
+    detail: { titleRegex: "^#\\s+(.+)$", publishedAtRegex: "Published Time:\\s*(\\S+)", summarySelector: 'meta[name="description"]' } } } as never;
+  const detail = await fetchDetail(`${base}/redirect`, source, { title: true, date: true, summary: true, body: true });
+  assert.equal(detail.title, "Publisher headline");
+  assert.equal(detail.publishedAt?.toISOString(), "2026-10-01T08:00:00.000Z");
+  assert.equal(detail.summary, null);
+  assert.equal(detail.body, null);
+  assert.equal(detail.attachments, null);
 });

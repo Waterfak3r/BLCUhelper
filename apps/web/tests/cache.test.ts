@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
 import { UNSAFE_decodeViaTurboStream } from "react-router";
-import { fakeApi, startWebServer, type WebServer } from "./web-server.ts";
+import { fakeApi, itemDetail, startWebServer, type WebServer } from "./web-server.ts";
 
 let web: WebServer;
 let origin: string;
@@ -32,7 +32,7 @@ const api = fakeApi(async (url, res, req) => {
     res.setHeader("Content-Disposition", 'attachment; filename="article.md"');
     return res.end("# Article");
   }
-  if (url.pathname === "/api/site/items/long-lived") return { id: "long-lived", title: "t" };
+  if (url.pathname === "/api/site/items/long-lived") return itemDetail({ id: "long-lived", title: "t" });
   if (url.pathname === "/api/site/contact") return { wechatQr: "/qr.png", feishuQr: "/qr.png" };
   if (url.pathname === "/api/site/stories/merged") {
     res.statusCode = 308;

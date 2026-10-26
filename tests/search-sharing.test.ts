@@ -11,7 +11,7 @@ import { buildApp } from '../apps/api/src/app.ts';
 
 const app = await buildApp();
 const id = `search-share-${tag()}`;
-const query = { channel: 'all' as const, category: null, tag: id, q: id, tab: 'relevance' as const };
+const query = { channel: 'all' as const, category: null, college: null, tag: id, q: id, tab: 'relevance' as const };
 
 before(async () => {
   // Found and released a minute ago: a rolling window that ends at the reader's clock holds it.
@@ -65,6 +65,27 @@ test('overlapping searches keep their category and explicit clock, and retain ov
     app.inject(`/api/site/pool?q=distinct${i}${id}&tab=relevance`))));
   assert.ok(responses.some(r => r.statusCode === 503));
   assert.ok(responses.filter(r => r.statusCode === 503).every(r => r.headers['retry-after'] === '5'));
+});
+
+test('overlapping college searches and cached totals cannot share a different publisher scope', async () => {
+  const source = "blcu-xxkx-rss";
+  await sql`INSERT INTO sources (id, name, kind, tier) VALUES (${source}, 'College search', 'rss', 'T1')
+    ON CONFLICT (id) DO NOTHING`;
+  await sql`UPDATE publications SET source_id=${source} WHERE article_id=${id}`;
+  try {
+    const [xxkx, bs] = await blocked(() => Promise.all([
+      loadPool({ ...query, college: 'xxkx' }), loadPool({ ...query, college: 'bs' }),
+    ]));
+    assert.deepEqual(xxkx.items.map(item => item.id), [id]);
+    assert.deepEqual(bs.items, []);
+    assert.deepEqual([xxkx.total, bs.total], [1, 0]);
+    const [xxkxTotal, bsTotal] = await Promise.all([
+      loadPool({ ...query, q: null, college: 'xxkx' }), loadPool({ ...query, q: null, college: 'bs' }),
+    ]);
+    assert.deepEqual([xxkxTotal.total, bsTotal.total], [1, 0]);
+  } finally {
+    await sql`UPDATE publications SET source_id=${id} WHERE article_id=${id}`;
+  }
 });
 
 test('completed work never hides a withdrawal and rejected work can be retried', async () => {

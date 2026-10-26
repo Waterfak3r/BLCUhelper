@@ -13,7 +13,7 @@ interface Content { sections?: Group[]; themes?: Group[]; metrics?: Record<strin
 /** Moves the item to its new section in every issue that carries it; says whether any issue changed. */
 export async function correctReportClassification(tx: Tx, articleId: string, reason: string): Promise<boolean> {
   const [item] = await tx<{ category: string | null }[]>`SELECT category FROM publications WHERE article_id=${articleId}`;
-  if (!item?.category) return false;
+  if (!item) return false;
   const reports = await tx<{ id: number; kind: string; content: Content; revision: number; generated_at: Date }[]>`
     SELECT id,kind,content,revision,generated_at FROM reports
     WHERE content @> ${tx.json({ sections: [{ items: [{ itemId: articleId }] }] })}

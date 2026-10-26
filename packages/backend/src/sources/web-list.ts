@@ -5,11 +5,12 @@ import { contentDocument } from "../lib/page-content.ts";
 import { fetchListing } from "./listing-fetch.ts";
 import { identityKeyForUrl, normalizeUrl } from "../lib/url.ts";
 import { collapseWhitespace, stripTags } from "../lib/text.ts";
-import { isSignInUrl, pagePublicationDate, pageRules, readableDocument, type ExtractedBody } from "../content/extract.ts";
+import { isSignInUrl, isSignInRedirect, pagePublicationDate, pageRules, readableDocument, settleStreamedContent, type ExtractedBody } from "../content/extract.ts";
 import { sanitizeBody } from "../content/sanitize.ts";
 import { JINA_PREFIX, jinaRead } from "../providers/jina.ts";
 import { articleUtcOffset, readPublicationDate, type PublicationDate } from "./dates.ts";
 import { FetchError, type Candidate, type SourceRow } from "./types.ts";
+import { documentAttachments, type Attachment } from "../content/attachments.ts";
 
 
 /** A date rule names one element; unrelated tooltips must not hide its visible publication date. */
@@ -356,7 +357,14 @@ export interface DetailNeed {
  * text ("Published Time: …", "# Heading"), so that paid rendering is bought only when such a rule is
  * needed; selectors and page metadata read the page's own HTML.
  */
-export async function fetchDetail(url: string, source: SourceRow, need: DetailNeed): Promise<PublicationDate & { title: string | null; summary: string | null; body: ExtractedBody | null }> {
+export interface DetailResult extends PublicationDate {
+  title: string | null;
+  summary: string | null;
+  body: ExtractedBody | null;
+  attachments: Attachment[] | null;
+}
+
+export async function fetchDetail(url: string, source: SourceRow, need: DetailNeed): Promise<DetailResult> {
   const d = source.config.detail ?? {};
   const offset = articleUtcOffset(source.config);
   const jinaListing = String(source.config.url ?? "").startsWith(JINA_PREFIX);
@@ -369,8 +377,13 @@ export async function fetchDetail(url: string, source: SourceRow, need: DetailNe
     // The rules read a page's head and byline. A page past the size limit (a long paper with inline
     // figures) is read up to it rather than failing on every run; a body cut there is not kept.
     const res = requireOk(await guardedFetch(url, { headers: languageHeaders(source.config.acceptLanguage), timeoutMs: 20_000, truncate: true }), "detail");
-    html = res.text();
-    page = { document: contentDocument(html), url: res.url, whole: !res.truncated && /html/.test(res.headers.get("content-type") ?? "") };
+    // Authentication redirects did not observe the requested publisher material. Keep Jina
+    // metadata, if any, but do not read the form's title/date/body or clear stored references.
+    if (!isSignInRedirect(url, res.url)) {
+      html = res.text();
+      page = { document: contentDocument(html), url: res.url, whole: !res.truncated && /html/.test(res.headers.get("content-type") ?? "") };
+      if (page.whole) settleStreamedContent(page.document);
+    }
   }
   const $ = html === null ? null : cheerio.load(html);
 
@@ -398,11 +411,12 @@ export async function fetchDetail(url: string, source: SourceRow, need: DetailNe
     summary = collapseWhitespace(el.attr("content") ?? el.text()) || null;
   }
 
+  const attachments = page?.whole ? documentAttachments(page.document, page.url) : null;
   // The body last, from the same document: Readability changes what it reads.
   let body: ExtractedBody | null = null;
   if (need.body && page?.whole) {
     try { body = readableDocument(page.document, page.url, pageRules(source.config)); }
     catch { /* A failed extraction must not discard the detail metadata. */ }
   }
-  return { ...date, title, summary, body };
+  return { ...date, title, summary, body, attachments };
 }

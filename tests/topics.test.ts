@@ -18,6 +18,7 @@ import { closeDb, sql } from "@aihot/backend/db";
 import { upsertMaterial } from "@aihot/backend/content/materials";
 import { stopBoss } from "@aihot/backend/jobs/queue";
 import { publishArticle } from "@aihot/backend/publication/publish";
+import { CATEGORIES } from "@aihot/industry/taxonomy";
 import { TOPICS, loadTopicPage, listTopicSummaries, topicsOfStory, restoreTopicFixtures } from "./topic-fixtures.ts";
 import { buildApp } from "../apps/api/src/app.ts";
 
@@ -49,18 +50,21 @@ interface Report {
   score?: number;
   selected?: boolean;
   fact?: number;
-  category?: string;
+  category?: (typeof CATEGORIES)[number]["key"];
 }
 
 /** A published report; `fact` links it to a fact before publishing, as grouping would. */
 async function report(r: Report): Promise<string> {
   n += 1;
+  // Analysis category and its classification tag describe the same sample, including the default.
+  const category = r.category ?? "academic";
+  const categoryTag = CATEGORIES.find((c) => c.key === category)!.label;
   const { articleId } = await upsertMaterial({
     sourceId: r.source ?? MEDIA, url: `https://example.com/topics-${T}-${n}`, title: r.originalTitle ?? r.title, bodyText: "body", bodyHtml: "<p>body</p>", bodyStatus: "ok", via: "fetch", publishedAt: r.at,
   });
   await sql`UPDATE articles SET discovered_at = ${r.at}, timeline_at = ${r.at}, grouped_at = now() WHERE id = ${articleId}`;
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, score, selected, subjects, tags)
-            VALUES (${articleId}, 1, 'rule', 'pass', ${r.category ?? "academic"}, ${r.title}, ${`摘要 ${n}`}, ${r.score ?? 80}, ${r.selected ?? true}, ${r.subjects ?? []}, ${[r.category === "opportunities" ? "升学就业交流" : r.category === "academic" ? "教务考试" : r.category === "events" ? "活动讲座" : "校园资讯", ...(r.tags ?? [])]})`;
+            VALUES (${articleId}, 1, 'rule', 'pass', ${category}, ${r.title}, ${`摘要 ${n}`}, ${r.score ?? 80}, ${r.selected ?? true}, ${r.subjects ?? []}, ${[categoryTag, ...(r.tags ?? [])]})`;
   if (r.fact) await sql`INSERT INTO fact_articles (fact_id, article_id, role) VALUES (${r.fact}, ${articleId}, 'report')`;
   await publishArticle(articleId, { releasedAt: new Date(r.at.getTime() + 60_000) });
   return articleId;
@@ -103,6 +107,8 @@ test("a company topic takes the articles about it, not the ones that only mentio
   const adjacent = await report({ at: hoursAgo(37), title: `发布TestMeta的新模型 ${T}`, subjects: ["testmeta", "testcollege"] });
   const headline = await report({ at: hoursAgo(38), title: `BLCU 被一篇盘点提到 ${T}`, subjects: ["testmeta"] });
   const agent = await report({ at: hoursAgo(39), title: `学生框架发布 ${T}`, tags: ["本科生"] });
+  const campus = await report({ at: hoursAgo(40), title: `校园资讯 ${T}`, category: "campus", tags: ["本科生"] });
+  const opportunity = await report({ at: hoursAgo(41), title: `实习报名 ${T}`, category: "opportunities", tags: ["本科生"] });
 
   const blcuM = await members("blcu");
   for (const id of [about, product, english]) assert.ok(blcuM.includes(id), "about BLCU");
@@ -114,6 +120,9 @@ test("a company topic takes the articles about it, not the ones that only mentio
   assert.ok(testmetaM.includes(adjacent), "TestMeta next to Chinese text");
   assert.ok(!testmetaM.includes(metadata), "DataTestMeta is not TestMeta");
   assert.ok((await members("student")).includes(agent), "a student direction takes its tag");
+  const noticeM = await members("notice");
+  for (const id of [about, agent, campus]) assert.ok(noticeM.includes(id), "the genre takes either matching classification tag");
+  assert.ok(!noticeM.includes(opportunity), "a student tag without a matching genre tag does not enter the genre");
 
   // The article page names the topics it belongs to.
   const topicsOf = async (id: string) => {
@@ -124,6 +133,8 @@ test("a company topic takes the articles about it, not the ones that only mentio
   assert.deepEqual(await topicsOf(subpoena), ["testcollege", "notice"]);
   assert.deepEqual(await topicsOf(pact), ["notice"]);
   assert.deepEqual(await topicsOf(agent), ["student", "notice"]);
+  assert.deepEqual(await topicsOf(campus), ["student", "notice"]);
+  assert.deepEqual(await topicsOf(opportunity), ["student"]);
 });
 
 test("a story page names the topics of its reports", async () => {

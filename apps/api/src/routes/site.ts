@@ -1,7 +1,7 @@
 // First-party site API (/api/site/*). Not public, not versioned, never called /api/v2.
 // Reads through the same public read layer as v1; no cookies are read or set.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { isCategoryKey, isChannelKey, type CategoryKey, type ChannelKey } from "@aihot/contracts/taxonomy";
+import { isCategoryKey, isChannelKey, isCollegeKey, type CategoryKey, type ChannelKey, type CollegeKey } from "@aihot/contracts/taxonomy";
 import type { ReportIndexResponse, ReportLatestPage, ReportNavigationResponse, SearchSuggestions, SiteContact } from "@aihot/contracts/site";
 import { InvalidCursorError } from "@aihot/backend/lib/cursor";
 import { exportMarkdown, loadItemDetail } from "@aihot/backend/publication/detail";
@@ -45,6 +45,7 @@ export interface FilterParams {
   channel: ChannelKey;
   category: CategoryKey | null;
   tag: string | null;
+  college: CollegeKey | null;
 }
 
 export function parseFilters(q: Record<string, string>): FilterParams {
@@ -53,7 +54,9 @@ export function parseFilters(q: Record<string, string>): FilterParams {
   const category = q.category ?? null;
   if (category !== null && !isCategoryKey(category)) throw new BadRequest("invalid category");
   const tag = q.tag?.trim() ? q.tag.trim().slice(0, 60) : null;
-  return { channel, category: category as CategoryKey | null, tag };
+  const college = q.college ?? null;
+  if (college !== null && !isCollegeKey(college)) throw new BadRequest("invalid college");
+  return { channel, category: category as CategoryKey | null, tag, college };
 }
 
 export function registerSite(app: FastifyInstance) {
@@ -65,7 +68,7 @@ export function registerSite(app: FastifyInstance) {
     const q = looseQuery(req);
     const filters = parseFilters(q);
     const limit = Math.min(Math.max(Number(q.limit) || 20, 1), 40);
-    const unfiltered = filters.channel === "all" && !filters.category && !filters.tag && !q.cursor;
+    const unfiltered = filters.channel === "all" && !filters.category && !filters.tag && !filters.college && !q.cursor;
     const [data, hot] = await Promise.all([
       loadTimeline({ ...filters, cursor: q.cursor || null, limit }),
       unfiltered ? loadHotStrip() : null,

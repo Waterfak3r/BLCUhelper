@@ -1,0 +1,1439 @@
+diff --git a/.dockerignore b/.dockerignore
+index 967a30f..1245796 100644
+--- a/.dockerignore
++++ b/.dockerignore
+@@ -11,6 +11,7 @@ updates
+ 
+ # 本地虚拟环境与构建产物
+ venv312
++.venv
+ dist
+ build
+ *.spec
+diff --git a/app_mp.py b/app_mp.py
+index a82576c..071c678 100644
+--- a/app_mp.py
++++ b/app_mp.py
+@@ -56,25 +56,26 @@ app.register_blueprint(articles_bp)
+ app.register_blueprint(account_pool_bp)
+ app.register_blueprint(proxy_bp)
+ 
+-migrate_legacy_config()
+-
+-# RSS 定时抓取（后台线程，失败不影响服务启动）
+-try:
+-    from backend.rss_scheduler import rss_scheduler
+-
+-    rss_scheduler.start()
+-except Exception as exc:  # noqa: BLE001
+-    print(f"[warn] RSS 调度器启动失败：{exc}", file=sys.stderr)
+ 
+ 
+ # ── 基础接口 ──────────────────────────────────────────────
+ 
+ @app.route("/healthz")
+ def healthz():
++    from backend.account_pool import account_pool
++    from backend.rss_scheduler import rss_scheduler
++
++    watchdog = rss_scheduler.health_snapshot()
++    # active 仅是本地缓存状态，不表示已联网验证微信凭证。
++    summary = account_pool.get_summary(read_only=True)
++    watchdog["accounts"] = {
++        key: summary[key] for key in ("total", "active", "cooldown", "invalid")
++    }
+     return jsonify({
+         "status": "ok",
+         "version": APP_VERSION,
+         "modules": len(ENABLED_MODULES),
++        "watchdog": watchdog,
+     })
+ 
+ 
+@@ -147,6 +148,14 @@ def main():
+     # 与 app.py 保持同一套启动参数，容器入口脚本可以共用
+     parser.add_argument("--no-browser", action="store_true", help="本服务不打开浏览器（占位参数）")
+     args = parser.parse_args()
++    migrate_legacy_config()
++    # 参数解析之后才启动调度器，导入与 --help 不执行后台任务。
++    try:
++        from backend.rss_scheduler import rss_scheduler
++        rss_scheduler.start()
++    except Exception as exc:  # noqa: BLE001
++        print(f"[warn] RSS 调度器启动失败：{exc}", file=sys.stderr)
++
+ 
+     ensure_dirs()
+ 
+diff --git a/backend/account_pool.py b/backend/account_pool.py
+index b3da11f..8a7cb87 100644
+--- a/backend/account_pool.py
++++ b/backend/account_pool.py
+@@ -576,9 +576,24 @@ class AccountPool:
+             accounts = self._load()
+             return [a for a in accounts if a.get("status") == "active"]
+ 
+-    def get_summary(self) -> dict:
++    def get_summary(self, *, read_only: bool = False) -> dict:
++        """统计本地状态；健康检查只读，不迁移账号或导入登录会话。"""
+         with self._lock:
+-            accounts = self._load()
++            if read_only:
++                try:
++                    raw_accounts = json.loads(ACCOUNT_POOL_FILE.read_text(encoding="utf-8-sig"))
++                except FileNotFoundError:
++                    raw_accounts = []
++                except (OSError, UnicodeError, ValueError):
++                    raise ValueError("Invalid local account state") from None
++                if not isinstance(raw_accounts, list):
++                    raise ValueError("Invalid local account state")
++                accounts = [
++                    a for a in raw_accounts
++                    if isinstance(a, dict) and (a.get("vid") or a.get("refreshToken"))
++                ]
++            else:
++                accounts = self._load()
+             total = len(accounts)
+             active = sum(1 for a in accounts if a.get("status") == "active")
+             cooldown = sum(1 for a in accounts if a.get("status") == "cooldown")
+@@ -692,8 +707,8 @@ _weread_session_lock = threading.Lock()
+ def get_weread_session():
+     """
+     获取专用于微信读书请求的 requests.Session。
+-    关键：强制设置 trust_env=False 绕过本地代理（如 Clash 7897），
+-    并配置长连接池，彻底避免并发请求时因代理中转引发连接重置或 HTTP 499 报错。
++    忽略环境代理及 netrc，仅使用应用中显式启用的代理配置。
++    每次请求读取现有代理设置，保留连接池与重试策略不变。
+     """
+     global _weread_session
+     if _weread_session is None:
+@@ -701,7 +716,12 @@ def get_weread_session():
+             if _weread_session is None:
+                 import requests
+                 from requests.adapters import HTTPAdapter
+-                s = requests.Session()
++                class WereadSession(requests.Session):
++                    def request(self, method, url, **kwargs):
++                        kwargs.setdefault("proxies", get_proxies_dict() or {})
++                        return super().request(method, url, **kwargs)
++
++                s = WereadSession()
+                 s.trust_env = False
+                 adapter = HTTPAdapter(pool_connections=20, pool_maxsize=20, max_retries=1)
+                 s.mount("https://", adapter)
+diff --git a/backend/articles.py b/backend/articles.py
+index 03e9b33..ec82a8c 100644
+--- a/backend/articles.py
++++ b/backend/articles.py
+@@ -308,13 +308,15 @@ def _fetch_articles_page(fakeid: str, begin: int, count: int, keyword: str = "",
+                 continue
+             if keyword and keyword.lower() not in title.lower():
+                 continue
+-            # 去重：若已有（如置顶推文），跳过
+-            if any(existing.get("title") == title for existing in articles):
++            # 同标题通知可以是不同文章；仅按原始 URL / reviewId 去重。
++            review_id = it.get("reviewId") or ""
++            norm_link = normalize_wechat_url(doc_u)
++            if any((norm_link and normalize_wechat_url(existing.get("link")) == norm_link)
++                   or (review_id and existing.get("id") == review_id) for existing in articles):
+                 continue
+ 
+             pic = mp_i.get("pic_url") or mp_i.get("thumbUrl") or it.get("cover") or ""
+             create_t = it.get("createTime") or mp_i.get("time") or 0
+-            review_id = it.get("reviewId") or ""
+ 
+             articles.append({
+                 "title": title,
+diff --git a/backend/auth.py b/backend/auth.py
+index 6b4238e..8328d24 100644
+--- a/backend/auth.py
++++ b/backend/auth.py
+@@ -11,6 +11,7 @@ import uuid
+ import random
+ import hashlib
+ import threading
++import logging
+ import urllib.request
+ import urllib.parse
+ import ssl
+@@ -28,6 +29,7 @@ from backend.account_pool import (
+ from backend.weread_signer import gen_signature
+ 
+ auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
++logger = logging.getLogger(__name__)
+ 
+ APP_HEADERS = {
+     'User-Agent': 'WeRead/7.5.0 (Android; 33; arm64-v8a)',
+@@ -41,20 +43,34 @@ _login_state = {
+     "progress": 0,
+     "qrcode": "",           # 二维码图片 URL
+     "uuid": "",
++    "expires_at": 0,
+ }
+-_login_lock = threading.Lock()
+-_poll_stop_event = threading.Event()
++_login_lock = threading.RLock()
++_login_session = None
+ 
+ 
+-def _set_login_state(status: str, message: str = "", progress: int = 0, qrcode: str = "", uuid_val: str = ""):
++def _session_current(session):
++    """Caller holds _login_lock; never let an old network response commit."""
++    return (_login_session is session and not session["cancel"].is_set()
++            and time.time() < session["expires_at"])
++
++
++def _set_session_state(session, status, message, progress):
++    with _login_lock:
++        if not _session_current(session):
++            return False
++        _login_state.update(status=status, message=message, progress=progress)
++        return True
++
++
++def _login_snapshot():
+     with _login_lock:
+-        _login_state["status"] = status
+-        _login_state["message"] = message
+-        _login_state["progress"] = progress
+-        if qrcode:
+-            _login_state["qrcode"] = qrcode
+-        if uuid_val:
+-            _login_state["uuid"] = uuid_val
++        if (_login_session and not _login_session["cancel"].is_set()
++                and time.time() >= _login_session["expires_at"]
++                and _login_state["status"] in ("scanning", "scanned")):
++            _login_state.update(status="expired", message="二维码已过期，请重新获取", progress=0)
++            _login_session["cancel"].set()
++        return dict(_login_state)
+ 
+ 
+ def get_wx_ticket() -> dict:
+@@ -130,48 +146,50 @@ def exchange_weread_token(auth_code: str, device_profile: dict = None) -> dict:
+     return res
+ 
+ 
+-def _background_poll_login(uuid_val: str, device_profile: dict):
+-    """后台长轮询监听微信扫码授权"""
+-    _poll_stop_event.clear()
+-    poll_url = f'https://long.open.weixin.qq.com/connect/l/qrconnect?f=json&uuid={uuid_val}'
+-    poll_headers = {
+-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
+-    }
+-
++def _background_poll_login(session, device_profile: dict):
++    """Network waits are outside the state lock; every result is session-guarded."""
++    poll_url = f'https://long.open.weixin.qq.com/connect/l/qrconnect?f=json&uuid={session["uuid"]}'
++    poll_headers = {'User-Agent': 'Mozilla/5.0'}
+     s = get_weread_session()
+-    start_time = time.time()
+-    while time.time() - start_time < 300 and not _poll_stop_event.is_set():
++    while True:
++        with _login_lock:
++            if not _session_current(session):
++                break
+         try:
+             resp = s.get(poll_url, headers=poll_headers, timeout=28)
+             res = resp.json()
+-            errcode = res.get('wx_errcode') if 'wx_errcode' in res else res.get('errcode')
+-
++            with _login_lock:
++                if not _session_current(session):
++                    break
++            errcode = res.get('wx_errcode', res.get('errcode'))
+             if errcode == 405:
+-                # 授权成功！
+-                wx_code = res.get('wx_code')
+-                _set_login_state("success", "授权成功，正在初始化微信读书会话...", 90)
++                if not _set_session_state(session, "scanned", "授权已确认，正在保存微信读书会话...", 90):
++                    return
+                 try:
+-                    login_info = exchange_weread_token(wx_code, device_profile=device_profile)
+-                    user = login_info.get("user", {})
+-                    vid = login_info.get("vid")
+-                    if not vid or not login_info.get("accessToken"):
+-                        raise RuntimeError(f"换取微信读书凭据失败: {login_info}")
+-
+-                    # 写入账号池并持久化绑定独立设备指纹
+-                    saved_acc = account_pool.add_or_update({
+-                        "vid": str(vid),
+-                        "accessToken": login_info.get("accessToken"),
+-                        "refreshToken": login_info.get("refreshToken"),
+-                        "skey": login_info.get("skey"),
+-                        "deviceId": login_info.get("deviceId"),
+-                        "deviceName": login_info.get("deviceName"),
+-                        "installId": login_info.get("installId"),
+-                        "userAgent": login_info.get("userAgent"),
+-                        "nickname": user.get("name", f"微信读书用户_{vid}"),
+-                        "avatar": user.get("avatar", ""),
+-                    })
+-
+-                    # 立即模拟真机在线同步会话 (shelf/sync 与 mp/list)，完成新设备在线态激活
++                    login_info = exchange_weread_token(res.get("wx_code"), device_profile=device_profile)
++                    with _login_lock:
++                        if not _session_current(session):
++                            return
++                        vid = login_info.get("vid")
++                        if not vid or not login_info.get("accessToken"):
++                            raise RuntimeError("换取微信读书凭据失败")
++                        user = login_info.get("user") or {}
++                        # Serialize cancellation/new-session creation with the token commit.
++                        account_pool.add_or_update({
++                            "vid": str(vid),
++                            "accessToken": login_info.get("accessToken"),
++                            "refreshToken": login_info.get("refreshToken"),
++                            "skey": login_info.get("skey"),
++                            "deviceId": login_info.get("deviceId"),
++                            "deviceName": login_info.get("deviceName"),
++                            "installId": login_info.get("installId"),
++                            "userAgent": login_info.get("userAgent"),
++                            "nickname": user.get("name", f"微信读书用户_{vid}"),
++                            "avatar": user.get("avatar", ""),
++                        })
++                        from backend.rss_scheduler import rss_scheduler
++                        rss_scheduler.resume_auth_failed_subscriptions()
++                        _login_state.update(status="success", message="登录成功，已保存微信读书会话", progress=100)
+                     try:
+                         from backend.weread_signer import activate_terminal_session
+                         auth_h = {
+@@ -180,40 +198,31 @@ def _background_poll_login(uuid_val: str, device_profile: dict):
+                             "basekey": login_info.get("accessToken"),
+                             "deviceId": login_info.get("deviceId"),
+                             "User-Agent": login_info.get("userAgent", APP_HEADERS['User-Agent']),
+-                            "Cookie": f"wr_vid={vid}; wr_skey={login_info.get('skey')}"
++                            "Cookie": f"wr_vid={vid}; wr_skey={login_info.get('skey')}",
+                         }
+                         activate_terminal_session(auth_h, session=s)
+-                    except Exception as ex:
+-                        logger.debug("登录后激活终端会话异常: %s", ex)
+-
+-                    logger.info("微信扫码登录入库成功: %s (VID: %s, 绑定设备: %s)", saved_acc.get("nickname"), vid, saved_acc.get("deviceName"))
+-                    _set_login_state("success", f"登录成功！欢迎，{user.get('name', '微信读书用户')}（已绑定专属设备：{saved_acc.get('deviceName')}）", 100)
+-                    return
+-                except Exception as e:
+-                    logger.exception("扫码登录换票入库异常: %s", e)
+-                    _set_login_state("failed", f"登录入库失败: {e}", 0)
+-                    return
+-
+-            elif errcode == 404:
+-                _set_login_state("scanned", "已扫码，请在手机微信上点击确认登录", 60)
+-            elif errcode == 408:
+-                # 继续等待
+-                pass
++                    except Exception:
++                        logger.debug("登录后激活终端会话未完成")
++                    logger.info("微信扫码登录入库成功")
++                except Exception:
++                    logger.warning("扫码登录换票或保存失败")
++                    _set_session_state(session, "failed", "登录会话保存失败，请重新扫码", 0)
++                return
++            if errcode == 404:
++                _set_session_state(session, "scanned", "已扫码，请在手机微信上点击确认登录", 60)
+             elif errcode in (402, 403):
+-                _set_login_state("expired", "二维码已过期，请点击重新刷新二维码", 0)
++                _set_session_state(session, "expired", "二维码已过期，请重新获取", 0)
+                 return
+-        except Exception as e:
+-            # 超时重试
+-            time.sleep(1)
+-
+-    if not _poll_stop_event.is_set():
+-        _set_login_state("expired", "扫码超时，请重新刷新二维码", 0)
++        except Exception:
++            session["cancel"].wait(1)
++    _login_snapshot()
+ 
+ 
+ 
+ @auth_bp.route("/status", methods=["GET"])
+ def get_status():
+     """获取登录状态（当前可用微信读书账号）"""
++    login_state = _login_snapshot()
+     accounts = account_pool.list_accounts()
+     active_acc = next((a for a in accounts if a["status"] == "active"), None)
+ 
+@@ -222,7 +231,7 @@ def get_status():
+             last_acc = accounts[0]
+             return jsonify({
+                 "logged_in": False,
+-                "login_state": _login_state,
++                "login_state": login_state,
+                 "token_preview": last_acc.get("token_preview", ""),
+                 "save_time": last_acc.get("save_time", 0),
+                 "message": "暂无可用微信读书账号，请扫码登录或点击刷新",
+@@ -235,14 +244,14 @@ def get_status():
+             })
+         return jsonify({
+             "logged_in": False,
+-            "login_state": _login_state,
++            "login_state": login_state,
+             "message": "未登录，请点击右上角扫码登录微信读书账号",
+             "pool_summary": account_pool.get_summary(),
+         })
+ 
+     return jsonify({
+         "logged_in": True,
+-        "login_state": _login_state,
++        "login_state": login_state,
+         "token_preview": active_acc.get("token_preview", ""),
+         "save_time": active_acc.get("save_time", 0),
+         "message": "登录有效",
+@@ -257,34 +266,43 @@ def get_status():
+ 
+ @auth_bp.route("/qrcode", methods=["GET", "POST"])
+ def get_qrcode():
+-    """获取微信读书扫码登录二维码与 UUID"""
+-    _poll_stop_event.set()  # 停止之前的轮询
+-    try:
+-        qr_data = get_qr_data()
+-        uuid_val = qr_data.get('uuid', '')
+-        if not uuid_val:
+-            return jsonify({"error": "生成二维码失败，未获取到 uuid"}), 500
+-
+-        b64 = qr_data.get('qrcode', {}).get('qrcodebase64', '')
+-        qr_img = f"data:image/jpeg;base64,{b64}" if b64 else f"https://open.weixin.qq.com/connect/qrcode/{uuid_val}"
+-        device_profile = generate_random_device_profile()
+-
+-        _set_login_state("scanning", "请使用微信扫描二维码授权登录", 20, qrcode=qr_img, uuid_val=uuid_val)
+-
+-        # 启动后台监听线程（携带该次登录专属分配的设备指纹）
+-        t = threading.Thread(target=_background_poll_login, args=(uuid_val, device_profile), daemon=True)
+-        t.start()
+-
+-        return jsonify({
+-            "errcode": 0,
+-            "uuid": uuid_val,
+-            "qrcode": qr_data.get("qrcode"),
+-            "qrcode_url": qr_img,
+-            "login_state": _login_state
+-        })
+-    except Exception as e:
+-        _set_login_state("failed", f"获取二维码失败: {e}", 0)
+-        return jsonify({"error": str(e)}), 500
++    """Reuse a live QR, including its original image and absolute expiry."""
++    global _login_session
++    # Serialize generation too: simultaneous UI/mail requests must share one QR.
++    with _login_lock:
++        state = _login_snapshot()
++        if (_login_session and _session_current(_login_session)
++                and state["status"] in ("scanning", "scanned")):
++            return jsonify({**_login_session["response"], "login_state": state})
++        if _login_session:
++            _login_session["cancel"].set()
++        try:
++            qr_data = get_qr_data()
++            uuid_val = qr_data.get("uuid", "")
++            if not uuid_val:
++                raise ValueError("Missing QR session")
++            b64 = qr_data.get("qrcode", {}).get("qrcodebase64", "")
++            qr_img = f"data:image/jpeg;base64,{b64}" if b64 else f"https://open.weixin.qq.com/connect/qrcode/{uuid_val}"
++            expires_at = time.time() + 300
++            response = {
++                "errcode": 0, "uuid": uuid_val, "qrcode": qr_data.get("qrcode"),
++                "qrcode_url": qr_img, "expires_at": expires_at,
++            }
++            session = {
++                "uuid": uuid_val, "expires_at": expires_at,
++                "cancel": threading.Event(), "response": response,
++            }
++            _login_session = session
++            _login_state.update(
++                status="scanning", message="请使用微信扫描二维码授权登录",
++                progress=20, qrcode=qr_img, uuid=uuid_val, expires_at=expires_at,
++            )
++            device_profile = generate_random_device_profile()
++            threading.Thread(target=_background_poll_login, args=(session, device_profile), daemon=True).start()
++            return jsonify({**response, "login_state": dict(_login_state)})
++        except Exception:
++            _login_state.update(status="failed", message="获取二维码失败，请重试", progress=0)
++            return jsonify({"error": "获取二维码失败，请重试"}), 500
+ 
+ 
+ @auth_bp.route("/login", methods=["POST"])
+@@ -302,16 +320,20 @@ def start_browser_login():
+ @auth_bp.route("/cancel", methods=["POST"])
+ def cancel_login():
+     """取消当前扫码登录"""
+-    _poll_stop_event.set()
+-    _set_login_state("idle", "已取消登录")
++    with _login_lock:
++        if _login_session:
++            _login_session["cancel"].set()
++        _login_state.update(status="idle", message="已取消登录", progress=0)
+     return jsonify({"message": "已取消扫码登录"})
+ 
+ 
+ @auth_bp.route("/logout", methods=["POST"])
+ def logout():
+     """退出登录（清除当前账号）"""
+-    _poll_stop_event.set()
+-    _set_login_state("idle", "已退出登录")
++    with _login_lock:
++        if _login_session:
++            _login_session["cancel"].set()
++        _login_state.update(status="idle", message="已退出登录", progress=0)
+     return jsonify({"message": "已退出登录"})
+ 
+ 
+diff --git a/backend/downloader.py b/backend/downloader.py
+index 867c13e..fe16560 100644
+--- a/backend/downloader.py
++++ b/backend/downloader.py
+@@ -1164,7 +1164,7 @@ def download_single_article(url: str, out_dir: Path, title_hint: str = "", _redi
+         for k, v in replacements.items():
+             digest = digest.replace(k, v)
+ 
+-    publish_time = int(datetime.now(timezone.utc).timestamp())
++    publish_time = 0
+     # 提取微信文章中的发布时间戳 ct
+     ct_match = re.search(r'\bct\s*=\s*["\']?(\d+)["\']?', raw_html)
+     if ct_match:
+diff --git a/backend/rss_feed.py b/backend/rss_feed.py
+index c7eaa71..d074bda 100644
+--- a/backend/rss_feed.py
++++ b/backend/rss_feed.py
+@@ -20,12 +20,10 @@ import hashlib
+ import hmac
+ import html
+ import os
+-import re
+ import threading
+ import time
+ from email.utils import formatdate
+ from pathlib import Path
+-from urllib.parse import quote
+ 
+ from flask import Response
+ 
+@@ -168,14 +166,17 @@ def _normalize_item(raw: dict, account: str) -> dict | None:
+     link = raw.get("link") or raw.get("url") or ""
+     link = normalize_wechat_short_url(str(link)) if link else ""
+     title = raw.get("title") or ""
++    path = str(raw.get("path") or "")
++    if path:
++        data = load_json(Path(path) / "data.json", {})
++        published = data.get("publish_time", 0) if isinstance(data, dict) else 0
++        saved_title = data.get("title") if isinstance(data, dict) else None
++        if isinstance(saved_title, str) and saved_title.strip():
++            title = saved_title
++    else:
++        published = raw.get("publish_time") or raw.get("update_time") or 0
+     if not link and not title:
+         return None
+-    published = (
+-        raw.get("publish_time")
+-        or raw.get("update_time")
+-        or raw.get("time")
+-        or 0
+-    )
+     # 公众号分组应优先使用准确的公众号名称（account 或 source），避免使用文章作者署名
+     acc_name = account or str(raw.get("account") or raw.get("source") or "")
+     if not acc_name:
+@@ -183,7 +184,6 @@ def _normalize_item(raw: dict, account: str) -> dict | None:
+ 
+     # 文章署名作者单独保存（与公众号名称区分开）
+     author = str(raw.get("author") or "")
+-    path = str(raw.get("path") or "")
+     if not author and path:
+         try:
+             meta = load_json(Path(path) / "metadata.json", {})
+@@ -213,6 +213,8 @@ def collect_items(account: str | None = None) -> list:
+     order: list = []
+ 
+     def push(raw, acc):
++        if account and acc and acc != account:
++            return
+         item = _normalize_item(raw, acc)
+         if not item:
+             return
+@@ -224,10 +226,13 @@ def collect_items(account: str | None = None) -> list:
+         if key in merged:
+             # 同一篇：补全缺失字段，保留更早拿到的那条
+             exist = merged[key]
+-            for field in ("digest", "cover", "path", "author"):
++            if item.get("path") and not exist.get("path"):
++                exist["path"] = item["path"]
++                exist["published"] = item["published"]
++            for field in ("digest", "cover", "author"):
+                 if not exist.get(field) and item.get(field):
+                     exist[field] = item[field]
+-            if not exist.get("published") and item.get("published"):
++            if not exist.get("path") and not exist.get("published") and item.get("published"):
+                 exist["published"] = item["published"]
+             return
+         merged[key] = item
+@@ -238,7 +243,9 @@ def collect_items(account: str | None = None) -> list:
+             push(raw, account)
+         for raw in history:
+             if isinstance(raw, dict) and raw.get("success"):
+-                push(raw, raw.get("account") or account)
++                raw_acc = str(raw.get("account") or "")
++                if not raw_acc or raw_acc == account:
++                    push(raw, raw_acc or account)
+     else:
+         for acc, arts in articles.items():
+             for raw in arts:
+@@ -268,119 +275,33 @@ def _cdata(value: str) -> str:
+     return "<![CDATA[%s]]>" % str(value or "").replace("]]>", "]]]]><![CDATA[>")
+ 
+ 
+-_RSS_STRIP_BLOCKS = re.compile(r"<(script|style|iframe|noscript)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
+-_RSS_EVENT_ATTRS = re.compile(r"""\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", re.IGNORECASE)
+-_RSS_RELATIVE_URL = re.compile(r"""(\s(?:src|href|poster)\s*=\s*)(["'])(?!(?:[a-z][a-z0-9+.-]*:|//|#))([^"']+)\2""", re.IGNORECASE)
+-_RSS_RELATIVE_CSS_URL = re.compile(r"""(url\(\s*(?:&quot;|["'])?)(media/[^)"'&]+)""", re.IGNORECASE)
+-
+-
+-def _find_article_html(art_dir: Path) -> Path | None:
+-    """定位文章目录中实际保存的离线 HTML"""
+-    if not art_dir.is_dir():
+-        return None
+-    candidates = sorted(f for f in art_dir.glob("*.html") if not f.name.endswith(("_raw.html", ".bak")))
+-    for c in candidates:
+-        if c.stem == art_dir.name:
+-            return c
+-    return candidates[0] if candidates else None
+-
+-
+-def _rss_article_body(html_text: str, base_url: str) -> str:
+-    """提取离线 HTML 的 #js_content 正文，保留富文本格式与图片"""
+-    start = re.search(r'<div id="js_content"[^>]*>', html_text)
+-    if start:
+-        end = html_text.rfind("</div>")
+-        body = html_text[start.end():end if end > start.end() else None]
+-    else:
+-        m = re.search(r"<body[^>]*>(.*)</body>", html_text, re.IGNORECASE | re.DOTALL)
+-        body = m.group(1) if m else html_text
+-    body = _RSS_STRIP_BLOCKS.sub("", body)
+-    body = _RSS_EVENT_ATTRS.sub("", body)
+-    body = _RSS_RELATIVE_URL.sub(
+-        lambda m: f"{m.group(1)}{m.group(2)}{base_url}{quote(m.group(3), safe='/%?=&;')}{m.group(2)}",
+-        body,
+-    )
+-    body = _RSS_RELATIVE_CSS_URL.sub(lambda m: f"{m.group(1)}{base_url}{quote(m.group(2))}", body)
+-    return body.strip()
+-
+-
+-def _read_content(item: dict, base_url: str) -> str:
++def _read_content(item: dict) -> str:
++    """只输出原始远程链接正文；过长时省略，不返回截断的附件链接。"""
+     path = item.get("path") or ""
+     if not path:
+         return ""
+-    try:
+-        p = Path(path)
+-        if not p.exists():
+-            return ""
+-
+-        # 优先读取离线 HTML，保留完整富文本与图片排版
+-        html_file = _find_article_html(p)
+-        if html_file:
+-            parent, name = p.parent.name, p.name
+-            art_base_url = "%sapi/articles/serve-file/%s/%s/" % (
+-                base_url,
+-                quote(parent, safe=""),
+-                quote(name, safe=""),
+-            )
+-            body = _rss_article_body(html_file.read_text(encoding="utf-8", errors="replace"), art_base_url)
+-            if body:
+-                if len(body) > MAX_CONTENT_CHARS:
+-                    body = body[:MAX_CONTENT_CHARS]
+-                return body
+-
+-        # 回落方案：读取 content.txt 并用段落包裹
+-        txt = p / "content.txt"
+-        if txt.is_file():
+-            text = txt.read_text(encoding="utf-8", errors="replace")
+-            lines = [f"<p>{html.escape(ln)}</p>" for ln in text.splitlines() if ln.strip()]
+-            body = "\n".join(lines)
+-            if len(body) > MAX_CONTENT_CHARS:
+-                body = body[:MAX_CONTENT_CHARS]
+-            return body
+-    except OSError:
+-        return ""
+-    return ""
+-
+-
+-def _local_link(base_url: str, item: dict) -> str:
+-    path = item.get("path") or ""
+-    if not path:
+-        return ""
+-    try:
+-        p = Path(path)
+-        if not p.exists():
+-            return ""
+-        html_file = _find_article_html(p)
+-        parent, name = p.parent.name, p.name
+-        file_name = html_file.name if html_file else f"{name}.html"
+-    except OSError:
+-        return ""
+-    return "%sapi/articles/serve-file/%s/%s/%s" % (
+-        base_url,
+-        quote(parent, safe=""),
+-        quote(name, safe=""),
+-        quote(file_name, safe=""),
+-    )
++    data = load_json(Path(path) / "data.json", {})
++    body = data.get("content") if isinstance(data, dict) else None
++    return body if isinstance(body, str) and len(body) <= MAX_CONTENT_CHARS else ""
+ 
+ 
+ def render_feed(items: list, title: str, description: str,
+                 base_url: str, fulltext: bool = True, image_url: str = "") -> str:
+     xml_items = []
+     for item in items:
+-        # 本地有落盘文件就走本地预览链接，否则回落到公众号原始链接
+-        xml_link = _local_link(base_url, item) or item["link"]
++        xml_link = item["link"]
+         if not xml_link:
+             continue
+ 
+-        pub_ts = item["published"] or time.time()
+         parts = [
+             "    <item>",
+             "      <title>%s</title>" % _text(item["title"]),
+             "      <link>%s</link>" % _text(xml_link),
+             "      <guid isPermaLink=\"false\">%s</guid>" % _text(item["link"] or xml_link),
+-            "      <pubDate>%s</pubDate>" % formatdate(pub_ts, usegmt=True),
+             "      <description>%s</description>" % _text(item["digest"]),
+         ]
++        if item["published"]:
++            parts.append("      <pubDate>%s</pubDate>" % formatdate(item["published"], usegmt=True))
+         if item.get("author"):
+             parts.append("      <dc:creator>%s</dc:creator>" % _text(item["author"]))
+         if item["cover"]:
+@@ -389,7 +310,7 @@ def render_feed(items: list, title: str, description: str,
+                 % _attr(item["cover"])
+             )
+         if fulltext:
+-            content = _read_content(item, base_url)
++            content = _read_content(item)
+             if content:
+                 parts.append(
+                     "      <content:encoded>%s</content:encoded>" % _cdata(content)
+diff --git a/backend/rss_scheduler.py b/backend/rss_scheduler.py
+index fb7f9bc..2cd3c2c 100644
+--- a/backend/rss_scheduler.py
++++ b/backend/rss_scheduler.py
+@@ -75,6 +75,74 @@ class RssScheduler:
+             save_json(RSS_SUBSCRIPTIONS_FILE, valid_subs)
+         return valid_subs
+ 
++    @staticmethod
++    def _error_kind(value):
++        error = str(value or "").strip().lower()
++        if not error:
++            return None
++        if any(marker in error for marker in ("captcha", "验证码", "验证", "-2041")):
++            return "verification"
++        if any(marker in error for marker in (
++            "auth", "expired", "login", "401", "token invalid", "invalid token",
++            "token_invalid", "登录", "过期",
++        )):
++            return "auth"
++        return "collection"
++
++    def resume_auth_failed_subscriptions(self):
++        """Make only enabled, idle auth failures due; a fetch clears the error."""
++        with self._lock, self._fetching_lock:
++            subs = self.get_subscriptions()
++            now = time.time()
++            changed = False
++            for sub in subs:
++                if (sub.get("enabled") and sub.get("fakeid") not in self._fetching
++                        and self._error_kind(sub.get("last_error")) == "auth"):
++                    sub["next_fetch_time"] = now
++                    changed = True
++            if changed:
++                self._save_subscriptions(subs)
++
++    def health_snapshot(self) -> dict:
++        """只读本地调度状态；不抓取、续期、修复订阅或暴露原始错误。"""
++        import math
++
++        with self._lock:
++            try:
++                raw_subs = json.loads(RSS_SUBSCRIPTIONS_FILE.read_text(encoding="utf-8-sig"))
++            except FileNotFoundError:
++                raw_subs = []
++            except (OSError, UnicodeError, ValueError):
++                raise ValueError("Invalid local subscription state") from None
++            if not isinstance(raw_subs, list):
++                raise ValueError("Invalid local subscription state")
++        with self._fetching_lock:
++            fetching = set(self._fetching)
++
++        subscriptions = []
++        for sub in raw_subs:
++            if not isinstance(sub, dict) or self._is_legacy_fakeid(sub.get("fakeid")):
++                continue
++            error_kind = self._error_kind(sub.get("last_error"))
++            last_fetch = self._safe_float(sub.get("last_fetch_time"), 0)
++            next_fetch = self._safe_float(sub.get("next_fetch_time"), 0)
++            subscriptions.append({
++                "id": str(sub["fakeid"]),
++                "name": str(sub.get("nickname") or ""),
++                "enabled": bool(sub.get("enabled")),
++                "interval_minutes": self._normalize_interval_minutes(sub.get("interval_minutes", 60)),
++                "last_fetch_time": last_fetch if math.isfinite(last_fetch) else 0,
++                "next_fetch_time": next_fetch if math.isfinite(next_fetch) else 0,
++                "fetching": sub["fakeid"] in fetching,
++                "error_kind": error_kind,
++            })
++        thread = self._thread
++        return {
++            "scheduler_running": bool(thread and thread.is_alive() and not self._stop_event.is_set()),
++            "in_fetch_window": self.is_in_fetch_window(),
++            "subscriptions": subscriptions,
++        }
++
+     def _save_subscriptions(self, subs: list):
+         save_json(RSS_SUBSCRIPTIONS_FILE, subs)
+ 
+@@ -627,10 +695,9 @@ class RssScheduler:
+             existing = self.get_articles(nickname)
+             existing_links = {normalize_wechat_url(a.get("link")) for a in existing if a.get("link")}
+             
+-            # 加载历史记录，用于归一化链接去重和 (账号, 标题) 双重兜底去重（仅针对已成功下载的记录去重，失败记录允许重新尝试下载）
++            # 只按规范化链接去重；同账号同标题可以是不同通知。
+             history = load_json(DOWNLOAD_HISTORY_FILE, [])
+             history_links = {normalize_wechat_url(item.get("link")) for item in history if isinstance(item, dict) and item.get("link") and item.get("success")}
+-            history_titles = {(item.get("account"), item.get("title")) for item in history if isinstance(item, dict) and item.get("account") and item.get("title") and item.get("success")}
+ 
+             new_articles = []
+             begin = 0
+@@ -647,22 +714,15 @@ class RssScheduler:
+                     has_old_article = False
+                     for art in page_articles:
+                         link = art.get("link", "")
+-                        title = art.get("title", "")
+                         norm_link = normalize_wechat_url(link)
+                         
+-                        # 查重：若规范化 URL 在 RSS/历史记录中，或者 (公众号, 标题) 已存在，均判定为老文章
+-                        is_duplicate = (
+-                            (norm_link and (norm_link in existing_links or norm_link in history_links))
+-                            or ((nickname, title) in history_titles)
+-                        )
++                        is_duplicate = norm_link and (norm_link in existing_links or norm_link in history_links)
+                         if is_duplicate:
+                             has_old_article = True
+                         else:
+                             new_articles.append(art)
+                             if norm_link:
+                                 existing_links.add(norm_link)
+-                            if title:
+-                                history_titles.add((nickname, title))
+                     
+                     # 如果当前页中包含了已有的老文章，或者新文章总数已经满足，或者返回的文章长度小于请求数，或者已抓完总数
+                     if has_old_article or len(page_articles) < count or (begin + len(page_articles) >= _total):
+@@ -709,12 +769,12 @@ class RssScheduler:
+                                 error_msg = str(e)
+                             time.sleep(1)
+ 
+-                        # 寻找历史记录中是否已存在该链接或标题
++                        # 寻找历史记录中是否已存在该链接。
+                         existing_history_item = None
+                         for item in history:
+                             if isinstance(item, dict):
+                                 item_link = normalize_wechat_url(item.get("link", ""))
+-                                if (norm_link and item_link == norm_link) or (item.get("account") == nickname and item.get("title") == title):
++                                if norm_link and item_link == norm_link:
+                                     existing_history_item = item
+                                     break
+ 
+@@ -745,13 +805,11 @@ class RssScheduler:
+                                 "path": downloaded_path,
+                                 "cover_url": result.get("cover_url") or art.get("cover", ""),
+                                 "digest": result.get("digest") or art.get("digest", ""),
+-                                "publish_time": result.get("publish_time") or art.get("update_time", int(time.time())),
++                                "publish_time": result.get("publish_time", art.get("update_time") or 0),
+                             }
+                             history.append(existing_history_item)
+                             if norm_link:
+                                 history_links.add(norm_link)
+-                            if title:
+-                                history_titles.add((nickname, title))
+ 
+                         # 仅在下载成功，或该失败是永久性失败（如作者已删除/内容被屏蔽）时，才加入到订阅缓存列表中（防止重复重试）
+                         if success or is_permanent:
+@@ -761,7 +819,7 @@ class RssScheduler:
+                                 "cover": result.get("cover_url") or art.get("cover", ""),
+                                 "digest": result.get("digest") or art.get("digest", ""),
+                                 "author": nickname,
+-                                "update_time": result.get("publish_time") or art.get("update_time", int(time.time())),
++                                "update_time": result.get("publish_time", art.get("update_time") or 0),
+                                 "path": downloaded_path or "",
+                             }
+                             existing.insert(0, rss_item)
+diff --git a/deploy/docker/Dockerfile b/deploy/docker/Dockerfile
+index a350333..1a8cfd9 100644
+--- a/deploy/docker/Dockerfile
++++ b/deploy/docker/Dockerfile
+@@ -91,7 +91,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh && mkdir -p /app/data
+ 
+ EXPOSE 5200
+ 
+-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
++HEALTHCHECK --interval=10m --timeout=5s --start-period=40s --retries=3 \
+     CMD curl -fsS "http://127.0.0.1:${PORT}/healthz" >/dev/null || exit 1
+ 
+ ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+diff --git a/tests/test_rss_avatars.py b/tests/test_rss_avatars.py
+index 1b55b6b..dc44020 100644
+--- a/tests/test_rss_avatars.py
++++ b/tests/test_rss_avatars.py
+@@ -4,11 +4,14 @@ import base64
+ import hashlib
+ import json
+ import sys
++import threading
+ import tempfile
+ import unittest
+ import xml.etree.ElementTree as ET
+ from pathlib import Path
+-from unittest.mock import patch
++from unittest.mock import Mock, patch
++
++REAL_THREAD = threading.Thread
+ 
+ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ 
+@@ -206,6 +209,539 @@ class RssAvatarTests(unittest.TestCase):
+         self.assertEqual(metadata["avatar_account_id"], ID_A)
+         self.assertEqual(metadata["round_head_img"], AVATAR_A)
+ 
++    def test_feed_preserves_saved_publisher_title_over_filename_safe_history(self):
++        history_title = "语观时序_霜降特辑_霜落北语，敛秋待芳"
++        published_title = "语观时序|霜降特辑:霜落北语，敛秋待芳"
++        path = self.root / history_title
++        self.write(path / "data.json", {"title": published_title, "publish_time": 0})
++        for title, link in ((history_title, SHORT_URL), ("", SHORT_URL)):
++            with self.subTest(history_title=title, link=link):
++                self.write(self.history, [{"title": title, "link": link, "path": str(path),
++                                           "account": "账号A", "success": True}])
++                items = rss_feed.collect_items("账号A")
++                self.assertEqual(len(items), 1)
++                xml = ET.fromstring(rss_feed.render_feed(items, "账号A", "", "http://localhost/"))
++                self.assertEqual(xml.findtext("channel/item/title"), published_title)
++
++    def test_saved_date_never_uses_history_or_list_acquisition_time(self):
++        path = self.root / "saved"
++        raw = {"title": "通知", "link": SHORT_URL, "path": str(path),
++               "time": 1900000000, "update_time": 1800000000, "publish_time": 1700000000}
++        for data, expected in (({}, 0), ({"publish_time": 0}, 0),
++                               ({"publish_time": 1600000000}, 1600000000)):
++            with self.subTest(data=data):
++                self.write(path / "data.json", data)
++                self.write(self.articles, {"账号A": [raw]})
++                self.write(self.history, [dict(raw, success=True)])
++                item = rss_feed.collect_items("账号A")[0]
++                self.assertEqual(item["published"], expected)
++                xml = ET.fromstring(rss_feed.render_feed([item], "通知", "", "http://localhost/"))
++                self.assertEqual(xml.findtext("channel/item/link"), SHORT_URL)
++                self.assertEqual(xml.findtext("channel/item/guid"), SHORT_URL)
++                self.assertEqual(xml.find("channel/item/pubDate") is None, expected == 0)
++
++    def test_list_dates_ignore_acquisition_time_and_saved_unknown_wins_merge(self):
++        raw = {"title": "通知", "link": SHORT_URL, "time": 1900000000}
++        self.assertEqual(rss_feed._normalize_item(raw, "账号A")["published"], 0)
++        raw["update_time"] = 1600000000
++        self.assertEqual(rss_feed._normalize_item(raw, "账号A")["published"], 1600000000)
++        path = self.root / "saved"
++        self.write(path / "data.json", {"publish_time": 0})
++        self.write(self.articles, {"账号A": [raw]})
++        self.write(self.history, [dict(raw, success=True, path=str(path))])
++        self.assertEqual(rss_feed.collect_items("账号A")[0]["published"], 0)
++
++    def test_feed_preserves_remote_material_and_qr_without_local_fallback_or_truncation(self):
++        path = self.root / "saved"
++        body = ('<p>扫码关注</p><img src="https://example.org/二维码.png">'
++                '<a href="https://example.org/material.pdf?sig=a%2Fb&amp;expires=42">附件</a>')
++        self.write(path / "data.json", {"content": body, "publish_time": 0})
++        (path / "saved.html").write_text("<p>filtered local preview</p>", encoding="utf-8")
++        (path / "content.txt").write_text("filtered text", encoding="utf-8")
++        item = rss_feed._normalize_item({"title": "通知", "link": SHORT_URL, "path": str(path)}, "账号A")
++        def rendered_body():
++            xml = ET.fromstring(rss_feed.render_feed([item], "通知", "", "http://localhost/"))
++            return xml.findtext("channel/item/{http://purl.org/rss/1.0/modules/content/}encoded")
++        self.assertEqual(rendered_body(), body)
++        self.write(path / "data.json", {"content": "x" * (rss_feed.MAX_CONTENT_CHARS + 1)})
++        self.assertIsNone(rendered_body())
++        self.write(path / "data.json", {"content": "x" * rss_feed.MAX_CONTENT_CHARS})
++        self.assertEqual(len(rendered_body()), rss_feed.MAX_CONTENT_CHARS)
++        (path / "data.json").unlink()
++        self.assertIsNone(rendered_body())
++
++    def test_download_dates_require_timestamp_in_original_html(self):
++        settings = {"auto_save_images": False, "auto_save_videos": False,
++                    "save_markdown": False, "save_pdf": False}
++        for script, expected in (("", 0), ('var ct = "1600000000";', 1600000000),
++                                 ('var publish_time = 1500000000;', 1500000000)):
++            with self.subTest(script=script), \
++                    patch.object(downloader, "fetch_wechat_article_html",
++                                 return_value=(article_page().replace("</head>", f"<script>{script}</script></head>"), SHORT_URL, "")), \
++                    patch.object(downloader, "get_settings", return_value=settings), \
++                    patch.object(downloader, "get_proxies_dict", return_value=None), \
++                    patch.object(downloader, "report_proxy_status"):
++                result = downloader.download_single_article(SHORT_URL, self.root / str(expected))
++                self.assertTrue(result["success"])
++                data = json.loads((Path(result["path"]) / "data.json").read_text(encoding="utf-8"))
++                self.assertEqual(data["publish_time"], expected)
++
++    def test_same_title_page_keeps_distinct_urls_but_deduplicates_review_identity(self):
++        from backend import articles
++        from unittest.mock import MagicMock
++        cover = MagicMock(status_code=200)
++        cover.json.return_value = {"reviewId": "cover", "title": "通知"}
++        chapters = MagicMock(status_code=200)
++        chapters.json.return_value = {"data": [
++            {"reviewId": "cover", "title": "通知"},
++            {"reviewId": "second", "title": "通知"},
++            {"reviewId": "third", "title": "通知"},
++        ], "hasMore": False}
++        session = MagicMock()
++        session.get.side_effect = [cover, chapters]
++        with patch.object(articles, "biz_to_book_id", return_value=ID_A), \
++                patch.object(articles, "get_weread_session", return_value=session), \
++                patch.object(articles, "borrow_weread_session", return_value=("account", "", "", {})), \
++                patch.object(articles, "_resolve_review_doc_url", side_effect=lambda rid, headers: f"https://mp.weixin.qq.com/s/{rid}"), \
++                patch.object(articles, "short_id_from_review_id", return_value=""), \
++                patch.object(articles.account_pool, "report"), \
++                patch("backend.waterwall.detect_waterwall", return_value=None):
++            result, _, _ = articles._fetch_articles_page(BIZ_A, 0, 10)
++        self.assertEqual([item["id"] for item in result], ["cover", "second", "third"])
++
++    def test_safe_feed_settings_do_not_fetch_or_cache_avatars(self):
++        self.write(self.articles, {"账号A": [{"title": "通知", "link": SHORT_URL}]})
++        with patch.object(rss_feed, "get_settings", return_value={
++                "rss_local_avatar": False, "rss_avatar_from_article": False}), \
++                patch.object(rss_feed, "article_avatar", side_effect=AssertionError("Unexpected avatar fetch")), \
++                patch.object(rss_feed, "cache_avatar", side_effect=AssertionError("Unexpected avatar cache")):
++            xml, _ = rss_feed.build_feed("账号A", 50, 0, True, "http://localhost/")
++        self.assertEqual(ET.fromstring(xml).findtext("channel/item/link"), SHORT_URL)
++
++    def test_scheduler_preserves_same_title_distinct_urls_and_history_records(self):
++        from backend import articles, config, rss_scheduler
++        scheduler = rss_scheduler.RssScheduler()
++        self.addCleanup(scheduler._executor.shutdown, wait=False)
++        old = {"title": "通知", "link": SHORT_URL, "account": "账号A", "success": True}
++        self.write(self.history, [old])
++        urls = ["https://mp.weixin.qq.com/s/second", "https://mp.weixin.qq.com/s/third"]
++        page = [{"title": "通知", "link": url, "update_time": 0} for url in urls]
++        with patch.object(config, "DOWNLOAD_HISTORY_FILE", self.history), \
++                patch.object(config, "get_settings", return_value={
++                    "download_dir": str(self.root / "downloads"), "max_retries": 1, "request_delay": 0}), \
++                patch.object(articles, "_fetch_articles_page", return_value=(page, 2, 0)), \
++                patch.object(downloader, "download_single_article",
++                             side_effect=lambda link, out_dir, title: {"success": True, "title": title, "publish_time": 0}) as download, \
++                patch.object(rss_scheduler.time, "sleep"), \
++                patch.object(scheduler, "get_articles", return_value=[]), \
++                patch.object(scheduler, "_save_articles") as save_articles, \
++                patch.object(scheduler, "get_subscriptions", return_value=[]), \
++                patch.object(scheduler, "_save_subscriptions"), \
++                patch.object(scheduler, "_run_upload", return_value={"disabled": True}):
++            scheduler._fetch_for_account({"fakeid": BIZ_A, "nickname": "账号A"})
++        self.assertEqual({call.args[0] for call in download.call_args_list}, set(urls))
++        history = json.loads(self.history.read_text(encoding="utf-8"))
++        self.assertEqual({item["link"] for item in history}, {SHORT_URL, *urls})
++        self.assertEqual({item["link"] for item in save_articles.call_args.args[1]}, set(urls))
++
++    def test_weread_requests_use_only_explicit_app_proxy_and_follow_setting_changes(self):
++        from backend import account_pool
++        configured = {"http": "http://127.0.0.1:7897", "https": "http://127.0.0.1:7897"}
++        with patch.object(account_pool, "_weread_session", None), \
++                patch.object(account_pool, "get_proxies_dict", side_effect=[None, configured, None]), \
++                patch.dict("os.environ", {"HTTPS_PROXY": "http://unexpected.invalid:9999",
++                                          "HTTP_PROXY": "http://unexpected.invalid:9999"}), \
++                patch("requests.sessions.get_netrc_auth", side_effect=AssertionError("Unexpected netrc access")), \
++                patch("requests.sessions.Session.send") as send:
++            session = account_pool.get_weread_session()
++            self.addCleanup(session.close)
++            for _ in range(3):
++                session.get("https://i.weread.qq.com/wxticket?nonceStr=weread", timeout=10)
++        self.assertEqual([call.kwargs["proxies"] for call in send.call_args_list],
++                         [{}, configured, {}])
++
++
++class CollectorHealthTests(unittest.TestCase):
++    def setUp(self):
++        from backend import account_pool, config, rss_scheduler
++        import app_mp
++
++        self.pool_module = account_pool
++        self.scheduler_module = rss_scheduler
++        self.app_module = app_mp
++        directory = tempfile.TemporaryDirectory(prefix="collector-health-test-")
++        self.addCleanup(directory.cleanup)
++        self.root = Path(directory.name)
++        self.pool_file = self.root / "pool.json"
++        self.subs_file = self.root / "subscriptions.json"
++        self.settings_file = self.root / "settings.json"
++        self.scheduler = rss_scheduler.RssScheduler()
++        self.addCleanup(self.scheduler._executor.shutdown, wait=False)
++        for module, name, value in (
++            (account_pool, "ACCOUNT_POOL_FILE", self.pool_file),
++            (rss_scheduler, "RSS_SUBSCRIPTIONS_FILE", self.subs_file),
++            (rss_scheduler, "rss_scheduler", self.scheduler),
++            (config, "APP_SETTINGS_FILE", self.settings_file),
++        ):
++            patcher = patch.object(module, name, value)
++            patcher.start()
++            self.addCleanup(patcher.stop)
++        self.write(self.pool_file, [])
++        self.write(self.subs_file, [])
++        self.write(self.settings_file, {"rss_start_hour": 0, "rss_end_hour": 24})
++        # A health probe must never acquire/renew credentials, import a session,
++        # repair persisted data, start workers, or contact any external endpoint.
++        for target in (
++            "requests.sessions.Session.request",
++            "backend.account_pool.refresh_access_token",
++            "backend.account_pool.account_pool.acquire",
++            "backend.account_pool.account_pool.list_accounts",
++            "backend.account_pool.account_pool._try_find_local_session",
++            "backend.account_pool.save_json",
++            "backend.rss_scheduler.save_json",
++            "backend.rss_scheduler.rss_scheduler.start",
++            "backend.rss_scheduler.rss_scheduler.submit_fetch",
++        ):
++            patcher = patch(target, side_effect=AssertionError("Unexpected health side effect"))
++            patcher.start()
++            self.addCleanup(patcher.stop)
++
++    @staticmethod
++    def write(path, value):
++        path.write_text(json.dumps(value), encoding="utf-8")
++
++    def probe(self):
++        response = self.app_module.app.test_client().get("/healthz")
++        self.assertEqual(response.status_code, 200)
++        payload = response.get_json()
++        self.assertEqual(set(payload), {"status", "version", "modules", "watchdog"})
++        self.assertEqual(payload["status"], "ok")
++        self.assertEqual(payload["version"], self.app_module.APP_VERSION)
++        self.assertEqual(payload["modules"], len(self.app_module.ENABLED_MODULES))
++        return payload["watchdog"]
++
++    def test_health_json_whitelists_accounts_and_subscriptions_without_secrets(self):
++        secret = "PRIVATE-HEALTH-SENTINEL"
++        self.write(self.pool_file, [
++            {"vid": secret, "nickname": secret, "status": status,
++             "accessToken": secret, "refreshToken": secret, "cookie_str": secret}
++            for status in ("active", "cooldown", "invalid")
++        ])
++        self.write(self.subs_file, [{
++            "fakeid": ID_A, "nickname": "订阅A", "enabled": True, "interval_minutes": 60,
++            "last_fetch_time": 123, "next_fetch_time": 456,
++            "last_error": f"401 token invalid {secret}", "credentials": secret,
++            "last_upload_error": secret,
++        }])
++        with self.scheduler._fetching_lock:
++            self.scheduler._fetching.add(ID_A)
++        snapshot = self.probe()
++        self.assertEqual(set(snapshot), {
++            "scheduler_running", "in_fetch_window", "accounts", "subscriptions",
++        })
++        self.assertFalse(snapshot["scheduler_running"])
++        self.assertTrue(snapshot["in_fetch_window"])
++        self.assertEqual(snapshot["accounts"], {"total": 3, "active": 1, "cooldown": 1, "invalid": 1})
++        self.assertEqual(snapshot["subscriptions"], [{
++            "id": ID_A, "name": "订阅A", "enabled": True, "interval_minutes": 60,
++            "last_fetch_time": 123, "next_fetch_time": 456,
++            "fetching": True, "error_kind": "auth",
++        }])
++        self.assertNotIn(secret, json.dumps(snapshot))
++
++    def test_error_categories_never_include_raw_errors(self):
++        cases = (
++            (None, None), ("", None), (" \t ", None),
++            ("登录已过期", "auth"), ("session expired", "auth"),
++            ("LOGIN required", "auth"), ("HTTP 401", "auth"),
++            ("invalid token", "auth"), ("token invalid", "auth"),
++            ("captcha required", "verification"), ("需要验证码", "verification"),
++            ("验证失败", "verification"), ("ret=-2041", "verification"),
++            ("request timeout PRIVATE", "collection"),
++        )
++        for error, expected in cases:
++            with self.subTest(error=error):
++                self.write(self.subs_file, [{
++                    "fakeid": ID_A, "enabled": True, "last_error": error,
++                }])
++                sub = self.probe()["subscriptions"][0]
++                self.assertEqual(sub["error_kind"], expected)
++                self.assertNotIn("last_error", sub)
++
++    def test_paused_and_outside_window_preserve_nonfailure_state(self):
++        self.write(self.settings_file, {"rss_start_hour": 0, "rss_end_hour": 0})
++        self.write(self.subs_file, [{
++            "fakeid": ID_A, "enabled": False, "next_fetch_time": 1,
++        }])
++        snapshot = self.probe()
++        self.assertFalse(snapshot["in_fetch_window"])
++        self.assertEqual(snapshot["accounts"], {"total": 0, "active": 0, "cooldown": 0, "invalid": 0})
++        self.assertFalse(snapshot["subscriptions"][0]["enabled"])
++        self.assertIsNone(snapshot["subscriptions"][0]["error_kind"])
++        self.assertEqual(snapshot["subscriptions"][0]["next_fetch_time"], 1)
++
++    def test_empty_or_legacy_local_data_is_not_imported_or_repaired(self):
++        self.write(self.pool_file, [{"nickname": "legacy"}])
++        self.write(self.subs_file, [None, {"fakeid": "${window.biz}"}, {
++            "fakeid": ID_A, "enabled": True, "interval_minutes": "15",
++        }])
++        before = {path: path.read_bytes() for path in (self.pool_file, self.subs_file)}
++        for _ in range(2):
++            snapshot = self.probe()
++            self.assertEqual(snapshot["accounts"]["total"], 0)
++            self.assertEqual(len(snapshot["subscriptions"]), 1)
++            self.assertEqual(snapshot["subscriptions"][0]["interval_minutes"], 15)
++            self.assertEqual(snapshot["subscriptions"][0]["next_fetch_time"], 0)
++        self.assertEqual(before, {path: path.read_bytes() for path in before})
++
++    def test_missing_local_files_remain_absent_after_probe(self):
++        self.pool_file.unlink()
++        self.subs_file.unlink()
++        snapshot = self.probe()
++        self.assertEqual(snapshot["accounts"], {"total": 0, "active": 0, "cooldown": 0, "invalid": 0})
++        self.assertEqual(snapshot["subscriptions"], [])
++        self.assertFalse(self.pool_file.exists())
++        self.assertFalse(self.subs_file.exists())
++
++    def test_corrupt_existing_state_fails_health_without_disclosing_or_repairing_data(self):
++        secret = "PRIVATE-CORRUPT-STATE-SENTINEL"
++        for path in (self.pool_file, self.subs_file):
++            for content in (
++                ('{"token": "' + secret).encode(),
++                json.dumps({"token": secret}).encode(),
++                b"\xff" + secret.encode(),
++            ):
++                with self.subTest(file=path.name, content_type=content[:1]):
++                    path.write_bytes(content)
++                    with patch.dict(self.app_module.app.config, {
++                        "TESTING": False, "PROPAGATE_EXCEPTIONS": False,
++                    }), self.assertLogs(self.app_module.app.logger, level="ERROR") as logs:
++                        response = self.app_module.app.test_client().get("/healthz")
++                    self.assertEqual(response.status_code, 500)
++                    self.assertNotIn(secret, response.get_data(as_text=True))
++                    self.assertNotIn(secret, "\n".join(logs.output))
++                    self.assertEqual(path.read_bytes(), content)
++                    self.write(path, [])
++
++    def test_unreadable_existing_state_is_not_reported_as_empty(self):
++        original_read_text = Path.read_text
++        for path in (self.pool_file, self.subs_file):
++            def read_text(target, *args, **kwargs):
++                if target == path:
++                    raise PermissionError("PRIVATE-READ-ERROR")
++                return original_read_text(target, *args, **kwargs)
++
++            with self.subTest(file=path.name), \
++                    patch.object(Path, "read_text", read_text), \
++                    patch.dict(self.app_module.app.config, {
++                        "TESTING": False, "PROPAGATE_EXCEPTIONS": False,
++                    }), self.assertLogs(self.app_module.app.logger, level="ERROR") as logs:
++                response = self.app_module.app.test_client().get("/healthz")
++            self.assertEqual(response.status_code, 500)
++            self.assertNotIn("PRIVATE-READ-ERROR", "\n".join(logs.output))
++            self.assertEqual(path.read_bytes(), b"[]")
++
++    def test_utf8_bom_local_state_remains_readable(self):
++        for path in (self.pool_file, self.subs_file):
++            path.write_text("[]", encoding="utf-8-sig")
++        snapshot = self.probe()
++        self.assertEqual(snapshot["subscriptions"], [])
++        self.assertEqual(snapshot["accounts"]["total"], 0)
++
++    def test_scheduler_lifecycle_and_fetching_are_observed_without_starting_work(self):
++        from unittest.mock import Mock
++        thread = Mock()
++        self.scheduler._thread = thread
++        thread.is_alive.return_value = True
++        self.assertTrue(self.probe()["scheduler_running"])
++        self.scheduler._stop_event.set()
++        self.assertFalse(self.probe()["scheduler_running"])
++        self.scheduler._stop_event.clear()
++        thread.is_alive.return_value = False
++        self.assertFalse(self.probe()["scheduler_running"])
++        self.scheduler._thread = None
++
++class QrAuthorizationTests(unittest.TestCase):
++    """Exercise the existing HTTP contract and isolated persisted recovery."""
++
++    def setUp(self):
++        from backend import auth, account_pool, rss_scheduler
++        self.auth = auth
++        self.pool_module = account_pool
++        directory = tempfile.TemporaryDirectory(prefix="qr-authorization-test-")
++        self.addCleanup(directory.cleanup)
++        self.root = Path(directory.name)
++        self.pool_file = self.root / "pool.json"
++        self.subs_file = self.root / "subscriptions.json"
++        self.pool_file.write_text("[]", encoding="utf-8")
++        self.subs_file.write_text("[]", encoding="utf-8")
++        self.scheduler = rss_scheduler.RssScheduler()
++        self.addCleanup(self.scheduler._executor.shutdown, wait=False)
++        self.workers = []
++        self.now = [1000.0]
++        self.network = Mock()
++        self.network.get.return_value.json.return_value = {"wx_errcode": 405, "wx_code": "confirmed"}
++        self.credentials = {"vid": "123", "accessToken": "PRIVATE-TOKEN", "refreshToken": "PRIVATE-REFRESH"}
++        for module, name, value in (
++            (auth, "_login_session", None),
++            (auth, "_login_state", dict(status="idle", message="", progress=0, qrcode="", uuid="", expires_at=0)),
++            (account_pool, "ACCOUNT_POOL_FILE", self.pool_file),
++            (rss_scheduler, "RSS_SUBSCRIPTIONS_FILE", self.subs_file),
++            (rss_scheduler, "rss_scheduler", self.scheduler),
++        ):
++            self.patch(module, name, value)
++        self.patch(auth.time, "time", side_effect=lambda: self.now[0])
++        self.qr = self.patch(auth, "get_qr_data", side_effect=[
++            {"uuid": name, "qrcode": {"qrcodebase64": "aW1hZ2U="}} for name in ("qr-one", "qr-two", "qr-three")
++        ])
++        self.patch(auth, "get_weread_session", return_value=self.network)
++        self.exchange = self.patch(auth, "exchange_weread_token", return_value=self.credentials)
++        # Capture the daemon entry point; individual tests release blocked calls explicitly.
++        self.patch(auth.threading, "Thread", side_effect=self.capture_worker)
++        self.patch(self.scheduler, "is_in_fetch_window", return_value=True)
++        import backend.weread_signer as signer
++        self.patch(signer, "activate_terminal_session")
++        self.patch(__import__("requests").sessions.Session, "request",
++                   side_effect=AssertionError("Unexpected network call"))
++        self.app = Flask(__name__)
++        self.app.register_blueprint(auth.auth_bp)
++        self.client = self.app.test_client()
++
++    def patch(self, module, name, value=..., **kwargs):
++        patcher = patch.object(module, name, value, **kwargs) if value is not ... else patch.object(module, name, **kwargs)
++        result = patcher.start()
++        self.addCleanup(patcher.stop)
++        return result
++
++    def capture_worker(self, target, args, daemon):
++        self.workers.append(lambda: target(*args))
++        return Mock()
++
++    def qr_request(self, method="post"):
++        response = getattr(self.client, method)("/api/auth/qrcode")
++        self.assertEqual(response.status_code, 200)
++        return response.get_json()
++
++    def state(self):
++        return self.client.get("/api/auth/status").get_json()["login_state"]
++
++    def test_live_qr_reused_across_routes_and_scanned_state(self):
++        first = self.qr_request()
++        self.assertEqual(first["expires_at"], 1300)
++        self.assertEqual(first["expires_at"], first["login_state"]["expires_at"])
++        for route in ("/api/auth/qrcode", "/api/auth/login", "/api/auth/login-browser"):
++            response = self.client.post(route).get_json()
++            for field in ("uuid", "qrcode", "qrcode_url", "expires_at"):
++                self.assertEqual(first[field], response[field])
++        def scanned(*args, **kwargs):
++            self.network.get.return_value.json.return_value = {"wx_errcode": 404}
++            if self.network.get.call_count > 1:
++                self.assertEqual(self.qr_request()["uuid"], first["uuid"])
++                self.assertEqual(self.state()["status"], "scanned")
++                self.client.post("/api/auth/cancel")
++            return self.network.get.return_value
++        self.network.get.side_effect = scanned
++        self.workers[0]()
++        self.assertEqual(self.qr.call_count, 1)
++
++    def test_concurrent_qr_requests_share_one_session(self):
++        # Use real thread objects captured before patching threading.Thread.
++        from concurrent.futures import ThreadPoolExecutor
++        with ThreadPoolExecutor(max_workers=4) as executor:
++            # ThreadPoolExecutor itself needs the real thread constructor.
++            with patch.object(self.auth.threading, "Thread", REAL_THREAD):
++                # Stub only the auth worker launch, not the concurrent clients.
++                with patch.object(self.auth, "_background_poll_login", return_value=None):
++                    results = list(executor.map(
++                        lambda _: self.app.test_client().post("/api/auth/qrcode").get_json(), range(8)))
++        self.assertEqual({item["uuid"] for item in results}, {"qr-one"})
++        self.assertEqual(len({item["expires_at"] for item in results}), 1)
++        self.assertEqual(self.qr.call_count, 1)
++
++    def test_cancelled_or_expired_blocked_worker_cannot_commit_or_replace_new_session(self):
++        for boundary in ("poll", "exchange"):
++            for action in ("cancel", "expire"):
++                with self.subTest(boundary=boundary, action=action):
++                    self.setUp_session_for_race(boundary, action)
++
++    def setUp_session_for_race(self, boundary, action):
++        # Reset only the local fixture; no account/session file from the repository.
++        self.client.post("/api/auth/cancel")
++        self.qr.side_effect = None
++        self.qr.return_value = {"uuid": f"old-{boundary}-{action}", "qrcode": {"qrcodebase64": "aW1hZ2U="}}
++        self.qr_request()
++        worker = self.workers[-1]
++        entered, release = threading.Event(), threading.Event()
++        response = Mock()
++        response.json.return_value = {"wx_errcode": 405, "wx_code": "confirmed"}
++        def blocked(*args, **kwargs):
++            entered.set()
++            if not release.wait(5):
++                raise AssertionError("Blocked fixture was not released")
++            return response if boundary == "poll" else self.credentials
++        self.network.get.side_effect = blocked if boundary == "poll" else None
++        self.exchange.side_effect = blocked if boundary == "exchange" else None
++        thread = REAL_THREAD(target=worker)
++        thread.start()
++        try:
++            self.assertTrue(entered.wait(5))
++            if action == "cancel":
++                self.client.post("/api/auth/cancel")
++            else:
++                self.now[0] += 301
++            self.qr.return_value = {"uuid": f"new-{boundary}-{action}", "qrcode": {"qrcodebase64": "bmV3"}}
++            newer = self.qr_request()
++        finally:
++            release.set()
++            thread.join(5)
++        self.assertFalse(thread.is_alive())
++        self.assertEqual(self.state(), newer["login_state"])
++        self.assertEqual(json.loads(self.pool_file.read_text(encoding="utf-8")), [])
++
++    def test_phone_confirmation_updates_same_account_and_only_resumes_idle_auth_failures(self):
++        self.pool_module.account_pool.add_or_update(dict(self.credentials, accessToken="OLD"))
++        rows = [
++            dict(fakeid=name, enabled=enabled, interval_minutes=60, next_fetch_time=9999,
++                 last_fetch_time=800, last_error=error)
++            for name, enabled, error in (
++                ("auth", True, "登录已过期"), ("disabled", False, "401"),
++                ("inflight", True, "401"), ("captcha", True, "captcha login"),
++                ("collection", True, "timeout"), ("healthy", True, None))
++        ]
++        self.subs_file.write_text(json.dumps(rows), encoding="utf-8")
++        self.scheduler._fetching.add("inflight")
++        self.qr_request()
++        self.workers[-1]()
++        self.assertEqual(self.state()["status"], "success")
++        self.assertEqual(self.state()["progress"], 100)
++        accounts = json.loads(self.pool_file.read_text(encoding="utf-8"))
++        self.assertEqual(len(accounts), 1)
++        self.assertEqual(accounts[0]["accessToken"], "PRIVATE-TOKEN")
++        saved = json.loads(self.subs_file.read_text(encoding="utf-8"))
++        self.assertEqual(saved[0], dict(rows[0], next_fetch_time=1000))
++        self.assertEqual(saved[1:], rows[1:])
++        with patch.object(self.scheduler, "submit_fetch") as submit:
++            self.scheduler.is_in_fetch_window.return_value = False
++            self.scheduler._tick()
++            submit.assert_not_called()
++            self.scheduler.is_in_fetch_window.return_value = True
++            self.scheduler._tick()
++            self.assertEqual([call.args[0]["fakeid"] for call in submit.call_args_list], ["auth"])
++        self.assertEqual(self.scheduler.health_snapshot()["subscriptions"][0]["error_kind"], "auth")
++
++    def test_failed_exchange_and_qr_generation_never_disclose_raw_secrets(self):
++        self.qr_request()
++        self.exchange.return_value = {"error": "PRIVATE-LOGIN-RESPONSE"}
++        with self.assertLogs(self.auth.logger, level="WARNING") as logs:
++            self.workers[-1]()
++        self.assertEqual(self.state()["status"], "failed")
++        self.assertNotIn("PRIVATE", json.dumps(self.state()) + "\n".join(logs.output))
++        self.qr.side_effect = RuntimeError("PRIVATE-NETWORK-ERROR")
++        response = self.client.post("/api/auth/qrcode")
++        self.assertEqual(response.status_code, 500)
++        self.assertNotIn("PRIVATE", response.get_data(as_text=True) + json.dumps(self.state()))
++
++
+ 
+ if __name__ == "__main__":
+     unittest.main()

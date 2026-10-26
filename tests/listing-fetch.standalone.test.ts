@@ -6,7 +6,7 @@ import { after, mock, test } from "node:test";
 import timersPromises from "node:timers/promises";
 import { MockAgent, getGlobalDispatcher, setGlobalDispatcher } from "undici";
 import { config } from "@aihot/backend/config";
-import { fetchListing } from "@aihot/backend/sources/listing-fetch";
+import { fetchListing, rewriteListingUrl } from "@aihot/backend/sources/listing-fetch";
 import { fetchRss } from "@aihot/backend/sources/rss";
 import { fetchWebList } from "@aihot/backend/sources/web-list";
 import { fetchJsonList } from "@aihot/backend/sources/json-list";
@@ -89,5 +89,29 @@ test("upstream 500 is retried once, but ordinary missing URLs and access/rate re
     mockAgent.get(host).intercept({ path }).reply(status, () => { hits++; return "Refused"; }).persist();
     assert.equal((await fetchListing(host + path)).status, status);
     assert.equal(hits, 1, host + path);
+  }
+});
+
+test("rewriteListingUrl remaps private feed hosts and ports dynamically", () => {
+  const map = new Map([
+    ["wechat-mp-tools", "127.0.0.1"],
+    ["custom-proxy:8080", "localhost:9090"],
+  ]);
+  assert.equal(rewriteListingUrl("http://wechat-mp-tools:5200/api/articles/rss/test?limit=20", map), "http://127.0.0.1:5200/api/articles/rss/test?limit=20");
+  assert.equal(rewriteListingUrl("http://custom-proxy:8080/feed", map), "http://localhost:9090/feed");
+  assert.equal(rewriteListingUrl("https://example.com/feed.xml", map), "https://example.com/feed.xml");
+  assert.equal(rewriteListingUrl("not-a-valid-url", map), "not-a-valid-url");
+});
+
+test("fetchListing applies feedHostMap when privateFeedHost is enabled", async () => {
+  const originalMap = config.feedHostMap;
+  try {
+    config.feedHostMap = new Map([["wechat-mp-tools:5200", "publisher.invalid"]]);
+    mockAgent.get(origin).intercept({ path: "/mapped-feed" }).reply(200, "<rss></rss>");
+    const res = await fetchListing("https://wechat-mp-tools:5200/mapped-feed");
+    assert.equal(res.status, 200);
+    assert.equal(res.text(), "<rss></rss>");
+  } finally {
+    config.feedHostMap = originalMap;
   }
 });

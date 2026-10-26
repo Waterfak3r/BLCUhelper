@@ -13,17 +13,38 @@
 import assert from "node:assert/strict";
 import { before, after, test } from "node:test";
 import { chromium, webkit, expect, type Browser } from "@playwright/test";
-import type { ReportDetail } from "@aihot/contracts/site";
+import type { ReportCitation, ReportDetail } from "@aihot/contracts/site";
 import { FIXTURE_AT as at, fakeApi, feedItem, itemDetail, startWebServer, visit, type WebServer } from "./web-server.ts";
 
 const item = feedItem({id:'navigation-fixture',title:'性能检查文章'});
 const detail = itemDetail({id:item.id,title:item.title,originalTitle:'Fixture article'});
+const attachment = { name: '<img src="/attachment-name"> 申请材料.pdf', url: "https://example.org/materials/application.pdf" };
+const materialsDetail = itemDetail({
+  id: "materials-fixture", title: "附带材料通知", readingMode: "summary-only", body: null,
+  outline: [], hasTranslation: false, markdownAvailable: false, attachments: [attachment],
+});
 const codeSource='import json\n\nwith open("data.json") as file:\n    data = json.load(file)\n\nfor record in data:\n    print(record["title"])\n';
 const readerBody=Array.from({length:30},(_,i)=>`<p>阅读段落 ${i}：先阅读文章，再查看后面的代码和图片。正文保持可读，图片和代码在需要时增强。</p>`).join('')
   +`<pre><code>${codeSource}</code></pre><pre><code>x = 1</code></pre>`
   +Array.from({length:12},(_,i)=>`<img src="/reader-image/${i}.svg" alt="正文配图 ${i}" width="640" height="360" loading="lazy">`).join('')
   +'<img src="/reader-image/tiny.svg" alt="小图标" width="16" height="16" loading="lazy"><a href="https://example.org"><img src="/reader-image/linked.svg" alt="链接图片" width="640" height="360" loading="lazy"></a>';
-const report = (kind:'daily'|'weekly'|'monthly'): ReportDetail => ({kind,key:kind==='daily'?'2026-10-04':kind==='weekly'?'2026-W40':'2026-10',issueNumber:1,title:'Fixture '+kind,generatedAt:at,lead:{title:'Fixture '+kind,leadParagraph:'Fixture report'},leadItemId:null,overview:null,highlights:[],sections:[],flashes:[],cover:null,metrics:{},readingMinutes:1,prev:null,next:null});
+const citation = (id: string, sourceName: string): ReportCitation => ({
+  itemId: id, title: "报道 " + id, summary: "固定报告摘要", sourceName,
+  sourceUrl: "https://example.org/reports/" + id, sourceIconUrl: null,
+  firstParty: false, publishedAt: at, available: true,
+});
+const reportLead = { ...citation("report-lead", "头条来源"), related: [citation("report-related", "关联来源")] };
+const reportHighlight = citation("report-highlight", "看点来源");
+const reportBody = citation("report-body", "正文来源");
+const reportFlash = citation("report-flash", "快讯来源");
+const reportWithdrawn = { ...citation("report-withdrawn", "已撤回来源"), available: false };
+const report = (kind:'daily'|'weekly'|'monthly'): ReportDetail => ({
+  kind, key:kind==='daily'?'2026-10-04':kind==='weekly'?'2026-W40':'2026-10', issueNumber:1,
+  title:'Fixture '+kind, generatedAt:at, lead:{title:'Fixture '+kind,leadParagraph:'Fixture report'},
+  leadItemId:reportLead.itemId, overview:null, highlights:[reportLead, reportHighlight],
+  sections:[{label:"报道",summary:null,items:[reportLead, reportHighlight, reportBody, reportWithdrawn]}],
+  flashes:[reportFlash], cover:null, metrics:{}, readingMinutes:1, prev:null, next:null,
+});
 const hits: string[] = [];
 let suggestionsVersion=1;
 let failing='';
@@ -58,6 +79,7 @@ const api=fakeApi((url,res,req)=>{
   if(p==='/api/site/items/navigation-fixture/original')return {...detail,body:{zh:null,original:'<p>Original fixture</p>',zhKind:null,complete:true},bodyLanguage:'original'};
   if(p==='/api/site/items/reader-fixture')return {...detail,id:'reader-fixture',title:'阅读增强检查',body:{...detail.body,zh:readerBody}};
   if(p==='/api/site/items/reader-fixture/original')return {...detail,id:'reader-fixture',title:'阅读增强检查',body:{...detail.body,zh:null,original:'<p>Original reader text</p>'},bodyLanguage:'original'};
+  if(p==='/api/site/items/materials-fixture')return materialsDetail;
   if(p.startsWith('/api/site/items/long-'))return {...detail,id:p.split('/').at(-1),title:'长列表详情'};
   const kind=p.match(/^\/api\/site\/reports\/(daily|weekly|monthly)\/latest-page$/)?.[1] as 'daily'|'weekly'|'monthly'|undefined;
   if(kind){const r=report(kind);return {report:r,index:[{key:r.key,issueNumber:1,title:r.title,count:0}]};}
@@ -92,6 +114,105 @@ test('SSR list and visited query variants return offline without another read',a
     await expect(page.getByRole('link',{name:'性能检查文章',exact:true})).toBeVisible({timeout:1500});
     await context.setOffline(false);
   }finally{await context.close();}
+});
+
+for (const width of [390, 1280, 1600]) test(`source links bypass the card while titles stay internal and materials stay on the original site at width ${width}`, async () => {
+  const context = await chrome.newContext({ viewport: { width, height: 900 } });
+  const page = await context.newPage();
+  const externalRequests: string[] = [];
+  await context.route("https://example.org/**", async (route) => {
+    externalRequests.push(route.request().url());
+    await route.fulfill({ contentType: "text/plain", body: "Original site fixture" });
+  });
+  try {
+    await visit(page, origin + "/");
+    const card = page.locator("article", { has: page.getByRole("heading", { name: item.title, exact: true }) });
+    const source = card.getByRole("link", { name: "Fixture", exact: true });
+    await expect(source).toHaveAttribute("href", item.links.original);
+    await expect(source).toHaveAttribute("rel", "noopener noreferrer");
+    const start = hits.length;
+    const opened = context.waitForEvent("page");
+    await source.click();
+    const original = await opened;
+    await original.waitForURL(item.links.original);
+    await original.close();
+    await expect(page).toHaveURL(origin + "/");
+    assert.equal(hits.slice(start).filter((url) => url.startsWith("/api/site/items/")).length, 0);
+    await card.getByRole("link", { name: item.title, exact: true }).click();
+    await expect(page).toHaveURL(origin + "/items/" + item.id);
+    await expect(page.getByText("固定正文", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "原文附带材料", exact: true })).toHaveCount(0);
+
+    await visit(page, origin + "/items/materials-fixture");
+    // The first visible source is the narrow metadata or the wide-screen rail, not the footer.
+    const detailSource = page.getByRole("link", { name: "Fixture", exact: true }).filter({ visible: true }).first();
+    await expect(detailSource).toHaveAttribute("href", materialsDetail.links.original);
+    await expect(detailSource).toHaveAttribute("target", "_blank");
+    const materials = page.getByRole("region", { name: "原文附带材料", exact: true });
+    const material = materials.getByRole("link", { name: attachment.name, exact: true });
+    await expect(material).toBeVisible();
+    await expect(material).toHaveAttribute("href", attachment.url);
+    await expect(material).toHaveAttribute("target", "_blank");
+    await expect(material).toHaveAttribute("rel", "noopener noreferrer");
+    assert.equal(await material.getAttribute("download"), null);
+    await expect(materials.locator("img")).toHaveCount(0);
+    await expect(page.getByText("固定正文", { exact: true })).toHaveCount(0);
+    assert.equal(externalRequests.includes(attachment.url), false, "showing materials does not fetch them");
+  } finally { await context.close(); }
+});
+
+test("the phone preview exposes the feed's original link while detail data is pending", async () => {
+  const context = await safari.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(/\/items\/navigation-fixture\.data(?:\?|$)/, async (route) => {
+    await pending;
+    await route.continue();
+  });
+  try {
+    await visit(page, origin + "/");
+    await page.getByRole("link", { name: item.title, exact: true }).click();
+    const preview = page.locator('article[aria-busy="true"]');
+    await expect(preview.getByRole("link", { name: "Fixture", exact: true })).toHaveAttribute("href", item.links.original);
+    await expect(page.getByRole("navigation", { name: "阅读工具" }).getByRole("link", { name: "原文", exact: true })).toHaveAttribute("href", item.links.original);
+    release();
+    await expect(page.getByText("固定正文", { exact: true })).toBeVisible();
+  } finally { release(); await context.close(); }
+});
+
+test("daily, weekly and monthly report sources open originals without taking over headlines or withdrawn citations", async () => {
+  for (const width of [390, 1280]) {
+    const context = await chrome.newContext({ viewport: { width, height: 900 } });
+    const page = await context.newPage();
+    await context.route("https://example.org/**", (route) => route.fulfill({ contentType: "text/plain", body: "Original report fixture" }));
+    try {
+      for (const kind of ["daily", "weekly", "monthly"] as const) {
+        await visit(page, origin + "/" + kind);
+        for (const c of [reportLead, reportHighlight, reportBody, reportLead.related[0]!, reportFlash]) {
+          const sources = page.getByRole("link", { name: c.sourceName, exact: true });
+          assert.ok(await sources.count() > 0, kind + " exposes " + c.sourceName);
+          for (const source of await sources.all()) {
+            await expect(source).toHaveAttribute("href", c.sourceUrl);
+            await expect(source).toHaveAttribute("target", "_blank");
+            await expect(source).toHaveAttribute("rel", "noopener noreferrer");
+          }
+        }
+        await expect(page.getByText(reportWithdrawn.sourceName, { exact: true })).toBeVisible();
+        await expect(page.getByRole("link", { name: reportWithdrawn.sourceName, exact: true })).toHaveCount(0);
+        await expect(page.getByRole("link", { name: reportBody.title, exact: true })).toHaveAttribute("href", "/items/" + reportBody.itemId);
+        const front = page.getByRole("region", { name: "头版", exact: true });
+        const opened = context.waitForEvent("page");
+        await front.getByRole("link", { name: reportHighlight.sourceName, exact: true }).click();
+        const original = await opened;
+        await original.waitForURL(reportHighlight.sourceUrl);
+        await original.close();
+        await expect(page).toHaveURL(origin + "/" + kind);
+        await front.getByRole("link", { name: reportHighlight.title, exact: true }).click();
+        await expect(page).toHaveURL(origin + "/" + kind + "#r-" + reportHighlight.itemId);
+      }
+    } finally { await context.close(); }
+  }
 });
 
 test('hover downloads nothing, a press fetches article data once for its click, touches that move do not, and failed prefetch does not replace the current page',async()=>{

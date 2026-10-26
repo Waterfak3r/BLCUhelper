@@ -36,14 +36,14 @@ after(closeDb);
 // late duplicate reports moving a fact; a representative leaking another fact's sources;
 // a withdrawn representative returned; pagination splitting a fact across pages.
 test('selected news keeps each fact at its first appearance under its representative',async()=>{
-  const timeline = await loadTimeline({channel:'all',category:null,tag:key,now});
+  const timeline = await loadTimeline({channel:'all',category:null,college:null,tag:key,now});
   assert.deepEqual(timeline.cards.map(c=>c.item.id),[`${key}-1-2`,`${key}-0-2`]);
   assert.deepEqual(timeline.cards.map(c=>c.anchorAt),[new Date(+now-3600000).toISOString(),new Date(+now-10*86400000).toISOString()]);
   assert.deepEqual(timeline.cards.map(c=>c.group!.reportCount),[6,6]);
   assert.deepEqual(timeline.cards.map(c=>c.group!.additionalSourceCount),[1,1]);
   assert.ok(timeline.cards.every(c=>!('latestDevelopment' in c.group!)&&!('developmentCount' in c.group!)), 'news cards carry no event progress');
-  const firstNews=await loadTimeline({channel:'all',category:null,tag:key,now,limit:1});
-  const secondNews=await loadTimeline({channel:'all',category:null,tag:key,now,limit:1,cursor:firstNews.nextCursor});
+  const firstNews=await loadTimeline({channel:'all',category:null,college:null,tag:key,now,limit:1});
+  const secondNews=await loadTimeline({channel:'all',category:null,college:null,tag:key,now,limit:1,cursor:firstNews.nextCursor});
   assert.deepEqual([...firstNews.cards,...secondNews.cards].map(c=>c.item.id),timeline.cards.map(c=>c.item.id));
   const followups=await loadStoryFollowups(storyPublicId,now);
   assert.deepEqual(followups!.items.map(i=>i.representative.id),[`${key}-1-2`,`${key}-0-2`],'each fact by its representative, the latest first');

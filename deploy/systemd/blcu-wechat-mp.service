@@ -1,0 +1,18 @@
+[Unit]
+Description=BLCU private WeChat collector
+After=network.target
+StartLimitIntervalSec=3600
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=blcuhelper
+Group=blcuhelper
+WorkingDirectory=/opt/blcuhelper/.data/wechat-mp-tools
+ExecStart=/opt/blcuhelper/.data/wechat-mp-tools/.venv/bin/python app_mp.py --host 127.0.0.1 --port 5200
+Restart=on-failure
+RestartSec=10s
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

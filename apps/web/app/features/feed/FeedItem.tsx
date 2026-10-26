@@ -2,10 +2,11 @@
 // the time in the source line, the bookmark at hand, the reason in one line and duplicate reports
 // behind one button that opens a sheet. One markup, two presentations.
 import { memo } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { IntentLink } from "../../components/ui/IntentLink";
 import type { GroupInfo, FeedItemSummary, TimelineFilters } from "@aihot/contracts/site";
 import { CATEGORY_LABELS } from "@aihot/contracts/taxonomy";
+import { TOPIC_TAGS } from "@aihot/industry/taxonomy";
 import { ITEM_COPY } from "@aihot/site";
 import { SameEventBadge, SelectedBadge } from "../../components/ui/Badge";
 import { ScoreLabel } from "../../components/ui/Score";
@@ -28,6 +29,7 @@ export interface FeedItemProps {
 }
 
 export const FeedItem = memo(function FeedItem({ item, group, filters, read = false, onOpen, showTags = false, at }: FeedItemProps) {
+  const [params] = useSearchParams();
   const isX = item.channel === "x" && !!item.x;
   const open = () => {
     rememberPreview(item);
@@ -35,6 +37,7 @@ export const FeedItem = memo(function FeedItem({ item, group, filters, read = fa
   };
   const showSources = !!group && (group.additionalSourceCount > 0 || group.reportCount > 1);
   const tags = showTags ? item.tags.slice(0, 3) : [];
+  const audienceTags = item.tags.filter((t) => TOPIC_TAGS.some((audience) => audience === t));
 
   return (
     <article className="relative min-w-0 lg:card lg:card-hover lg:px-[18px] lg:pb-[14px] lg:pt-[15px]" data-item-id={item.id}>
@@ -95,6 +98,22 @@ export const FeedItem = memo(function FeedItem({ item, group, filters, read = fa
               #{t}
             </Link>
           ))}
+        </div>
+      )}
+      {audienceTags.length > 0 && (
+        <div className="relative z-10 mt-2 flex flex-wrap gap-2 lg:hidden">
+          {audienceTags.map((tag) => {
+            const sp = new URLSearchParams(params);
+            if (sp.get("tag")?.trim() === tag) sp.delete("tag");
+            else sp.set("tag", tag);
+            sp.delete("page");
+            sp.delete("cursor");
+            return (
+              <Link key={tag} to={`/all?${sp}`} className="inline-flex min-h-11 items-center rounded-full bg-well px-3 text-[12px] text-ink-3 active:text-accent">
+                {tag}
+              </Link>
+            );
+          })}
         </div>
       )}
 

@@ -10,7 +10,7 @@ import { loadPool, publicMatchCondition, searchTerms } from "@aihot/backend/publ
 const T = `relevance-${tag()}`;
 const now = new Date("2026-01-01T12:00:00Z");
 const id = (suffix: string) => `${T}-${suffix}`;
-const query = (q: string) => ({ channel: "all" as const, category: null, tag: null, tab: "relevance" as const, q, now });
+const query = (q: string) => ({ channel: "all" as const, category: null, college: null, tag: null, tab: "relevance" as const, q, now });
 after(restoreTopicFixtures);
 after(closeDb);
 before(async () => {
@@ -19,14 +19,15 @@ before(async () => {
 
 async function add(suffix: string, direct: string, body: string, options: {
   title?: string; age?: number; channel?: "news" | "x"; category?: "academic" | "opportunities"; tags?: string[];
+  sourceId?: string;
   visibility?: string; eligible?: boolean; future?: boolean; noSearchRow?: boolean;
 } = {}) {
   const at = new Date(+now - (options.age ?? 60) * 1000);
   await sql`INSERT INTO articles (id, source_id, identity_key, url, title, discovered_at, timeline_at)
-    VALUES (${id(suffix)}, ${T}, ${id(suffix)}, ${`https://example.org/${id(suffix)}`}, ${options.title ?? "neutral"}, ${at}, ${at})`;
+    VALUES (${id(suffix)}, ${options.sourceId ?? T}, ${id(suffix)}, ${`https://example.org/${id(suffix)}`}, ${options.title ?? "neutral"}, ${at}, ${at})`;
   await sql`INSERT INTO publications (article_id, title, source_id, channel, category, tags, url, discovered_at, timeline_at, sort_at,
     selected, eligible, visibility, visible_after, search_text)
-    VALUES (${id(suffix)}, ${options.title ?? "neutral"}, ${T}, ${options.channel ?? "news"}, ${options.category ?? "academic"}, ${options.tags ?? []},
+    VALUES (${id(suffix)}, ${options.title ?? "neutral"}, ${options.sourceId ?? T}, ${options.channel ?? "news"}, ${options.category ?? "academic"}, ${options.tags ?? []},
       ${`https://example.org/${id(suffix)}`}, ${at}, ${at}, ${at}, ${options.future ?? false}, ${options.eligible ?? true},
       ${options.visibility ?? "public"}, ${options.future ? new Date(+now + 60_000) : at}, ${direct})`;
   if (!options.noSearchRow) await sql`INSERT INTO pool_search (article_id, direct, body) VALUES (${id(suffix)}, ${direct}, ${body})`;
@@ -103,4 +104,50 @@ test("equal relevance ranks a seated selected item, then the higher score, then 
   const result = await loadPool(query("wq"));
   assert.deepEqual(result.items.map(item => item.id), ["tie-selected", "tie-score", "tie-unseated", "tie-new"].map(id));
   assert.equal(result.total, 4);
+});
+
+test("college pool intersects publisher sources with category, audience and both search orderings", async () => {
+  const sources = ["blcu-xxkx-notices", "blcu-xxkx-rss", "blcu-bs-notices", "blcu-yjsy-notices"];
+  for (const source of sources) await sql`INSERT INTO sources (id, name, kind, tier)
+    VALUES (${source}, '信息科学学院 notification', 'rss', 'T1') ON CONFLICT (id) DO NOTHING`;
+  const direct = `${T} college`;
+  await add("college-web", direct, direct, { sourceId: sources[0], tags: [T] });
+  await add("college-wechat", direct, direct, { sourceId: sources[1], tags: [T] });
+  await add("college-other", direct, direct, { sourceId: sources[2], tags: [T] });
+  await add("college-central", direct, direct, { sourceId: sources[3], tags: [T] });
+  await add("college-category", direct, direct, { sourceId: sources[0], category: "opportunities", tags: [T] });
+  await add("college-audience", direct, direct, { sourceId: sources[0] });
+  await add("college-keyword", "unrelated", "unrelated", { sourceId: sources[0], tags: [T] });
+  for (const tab of ["time", "relevance"] as const) {
+    const result = await loadPool({ ...query(direct), college: "xxkx", category: "academic", tag: T, tab });
+    assert.deepEqual(new Set(result.items.map(item => item.id)), new Set(["college-web", "college-wechat"].map(id)));
+    assert.equal(result.total, 2);
+    assert.equal(result.filters.college, "xxkx");
+    const beyond = await loadPool({ ...query(direct), college: "xxkx", category: "academic", tag: T, tab, page: 2 });
+    assert.deepEqual([beyond.items, beyond.total, beyond.pageCount], [[], 2, 1]);
+    const other = await loadPool({ ...query(direct), college: "bs", category: "academic", tag: T, tab });
+    assert.deepEqual(other.items.map(item => item.id), [id("college-other")]);
+  }
+  const scope = { ...query(""), q: null, category: "academic" as const, tag: T };
+  const result = await loadPool({ ...scope, college: "xxkx" });
+  assert.equal(result.total, 3);
+  assert.equal(result.todayCount, 3);
+});
+
+test("a college pool never points a yielding report at another college's selected representative", async () => {
+  for (const source of ["blcu-xxkx-notices", "blcu-bs-notices"]) await sql`INSERT INTO sources (id, name, kind, tier)
+    VALUES (${source}, ${source}, 'rss', 'T1') ON CONFLICT (id) DO NOTHING`;
+  const [fact] = await sql<{ id: number }[]>`INSERT INTO facts (public_id, title)
+    VALUES (${`${T}-cross-college`}, 'Shared event') RETURNING id`;
+  const direct = `${T} seat`;
+  await add("college-yielding", direct, direct, { sourceId: "blcu-xxkx-notices", tags: [T] });
+  await add("college-holder", direct, direct, { sourceId: "blcu-bs-notices", tags: [T] });
+  await sql`UPDATE publications SET selected = true, fact_id = ${fact!.id},
+    seat = (article_id = ${id("college-holder")})
+    WHERE article_id IN ${sql(["college-yielding", "college-holder"].map(id))}`;
+  const result = await loadPool({ ...query(direct), college: "xxkx", tag: T });
+  assert.deepEqual(result.items.map(item => item.id), [id("college-yielding")]);
+  assert.equal(result.items[0]!.sameEvent ?? null, null);
+  const unfiltered = await loadPool({ ...query(direct), tag: T });
+  assert.equal(unfiltered.items.find(item => item.id === id("college-yielding"))!.sameEvent?.id, id("college-holder"));
 });

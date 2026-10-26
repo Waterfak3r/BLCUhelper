@@ -210,7 +210,7 @@ function ItemPreview({ preview }: { preview: FeedItemSummary }) {
       <PhoneBar back={{ to: preview.selected ? "/" : "/all", label: preview.selected ? "精选" : "全部" }} title={isX ? preview.x!.authorName : preview.title} />
       <article className="pb-6 pt-3" aria-busy="true">
         <div className="mb-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-ink-3">
-          <span className="font-semibold text-ink-2">{isX ? preview.x!.authorName : preview.source.name}</span>
+          <a href={preview.links.original} target="_blank" rel="noopener noreferrer" className="font-semibold text-ink-2 hover:text-accent">{isX ? preview.x!.authorName : preview.source.name}</a>
           {isX && <span>· @{preview.x!.handle} · X</span>}
           <span>·</span>
           {!preview.publishedAt && <span>收录于</span>}
@@ -243,6 +243,7 @@ function ItemPreview({ preview }: { preview: FeedItemSummary }) {
       </article>
       <ReaderToolbar
         item={preview}
+        originalUrl={preview.links.original}
         originalLabel={isX ? "原推" : "原文"}
         onShare={async () => {
           if ((await shareOrCopy(preview)) === "copied") setToast("链接已复制");
@@ -389,7 +390,7 @@ function ItemView({ item }: { item: SiteItemDetail }) {
   // under the facts (or under the notes when only the right rail shows).
   const facts = (
     <RailSection title="来源">
-      <div className="text-[14px] font-semibold leading-snug text-ink">{isX ? item.x!.authorName : item.source.name}</div>
+      <a href={item.links.original} target="_blank" rel="noopener noreferrer" className="text-[14px] font-semibold leading-snug text-ink hover:text-accent">{isX ? item.x!.authorName : item.source.name}</a>
       <div className="mt-1 text-[12.5px] leading-relaxed text-ink-3">
         {isX ? `@${item.x!.handle} · X` : item.author ?? hostOf(item.links.original)}
       </div>
@@ -474,7 +475,7 @@ function ItemView({ item }: { item: SiteItemDetail }) {
         <div className="sticky top-0 z-20 -mx-2 hidden bg-bg/95 px-2 py-1.5 backdrop-blur lg:block 2xl:hidden">{backButton}</div>
         <article className="pb-6 pt-3 lg:pt-2 2xl:pt-1">
           <div className={`flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-ink-3 2xl:hidden ${isX ? "" : "mb-3"}`}>
-            <span className="font-semibold text-ink-2">{isX ? item.x!.authorName : item.source.name}</span>
+            <a href={item.links.original} target="_blank" rel="noopener noreferrer" className="font-semibold text-ink-2 hover:text-accent">{isX ? item.x!.authorName : item.source.name}</a>
             {isX && <span>· @{item.x!.handle} · X</span>}
             {item.author && !isX && <span>· {item.author}</span>}
             <span>·</span>
@@ -553,6 +554,23 @@ function ItemView({ item }: { item: SiteItemDetail }) {
 
           {isX && item.x!.media.length > 0 && <MediaGallery media={item.x!.media} postUrl={item.links.original} />}
           {isX && item.x!.quoted?.text && <QuotedPost quoted={item.x!.quoted} original={lang === "original"} />}
+
+          {item.attachments.length > 0 && (
+            <section className="mt-8 border-t border-line pt-4" aria-labelledby="item-attachments">
+              <h2 id="item-attachments" className="text-[14px] font-semibold text-ink">原文附带材料</h2>
+              <p className="mt-1 text-[13px] leading-relaxed text-ink-4">点击跳转原站，访问权限与链接有效性以原站为准。</p>
+              <ul className="mt-3 space-y-2">
+                {item.attachments.map((attachment) => (
+                  <li key={attachment.url}>
+                    <a href={attachment.url} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-baseline gap-1.5 text-[14px] text-ink-2 hover:text-accent">
+                      <span className="min-w-0 break-words">{attachment.name}</span>
+                      <IconExternal size={13} className="shrink-0" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <p className="mt-8 text-[13px] text-ink-4">
             来源：

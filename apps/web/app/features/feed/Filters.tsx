@@ -1,12 +1,15 @@
 // Feed filters: the channel and category choice (a row of tabs on desktop, a sheet behind the bar's filter
 // button on phones), the phone bar of 精选 and 全部, and search.
 import { useEffect, useRef, useState } from "react";
-import { Form, Link, useNavigation, useSearchParams } from "react-router";
-import { CATEGORY_KEYS, CATEGORY_LABELS, CHANNEL_LABELS, type CategoryKey, type ChannelKey } from "@aihot/contracts/taxonomy";
+import { Form, Link, useLocation, useNavigate, useNavigation, useSearchParams } from "react-router";
+import { CATEGORY_KEYS, CATEGORY_LABELS, CHANNEL_LABELS, COLLEGES, COLLEGE_LABELS, type CategoryKey, type ChannelKey, type CollegeKey } from "@aihot/contracts/taxonomy";
+import { TOPIC_TAGS } from "@aihot/industry/taxonomy";
 import { SITE } from "@aihot/site";
 import { IconClose, IconFilter, IconSearch } from "../../components/icons";
 import { PillTabs } from "../../components/ui/Tabs";
 import { ChoiceTick, Sheet, sheetChoice } from "../../components/ui/Sheet";
+import { Select } from "../../components/ui/Controls";
+import { readFilters } from "../../lib/seo";
 import { Wordmark } from "@aihot/site/brand/Logo.tsx";
 import { BarButton, PhoneBar } from "../../components/shell/PhoneBar";
 import { openSearch } from "../search/SearchOverlay";
@@ -31,9 +34,9 @@ function hrefWith(base: string, params: URLSearchParams, patch: Record<string, s
  */
 function filterOptions(base: string, params: URLSearchParams, noneLabel: string) {
   return [
-    { key: "all", label: noneLabel, to: hrefWith(base, params, { category: null, channel: null }) },
-    { key: "firstParty", label: CHANNEL_LABELS.firstParty, to: hrefWith(base, params, { category: null, channel: "firstParty" }) },
-    ...CATEGORY_KEYS.map((k) => ({ key: k, label: CATEGORY_LABELS[k], to: hrefWith(base, params, { category: k, channel: null }) })),
+    { key: "all", label: noneLabel, to: hrefWith(base, params, { category: null, channel: null, q: null, search: null, tab: null }) },
+    { key: "firstParty", label: CHANNEL_LABELS.firstParty, to: hrefWith(base, params, { category: null, channel: "firstParty", q: null, search: null, tab: null }) },
+    ...CATEGORY_KEYS.map((k) => ({ key: k, label: CATEGORY_LABELS[k], to: hrefWith(base, params, { category: k, channel: null, q: null, search: null, tab: null }) })),
   ];
 }
 
@@ -47,15 +50,42 @@ export function CategoryTabs({ base, category, channel = "all", layoutId, classN
   return <PillTabs items={filterOptions(base, params, "全部").map(o => ({ ...o, prefetchOnPress: true }))} active={filterKey(category, channel)} layoutId={layoutId} label="筛选" className={className} />;
 }
 
+/** Publishing college is independent of category, audience and channel. */
+export function CollegeSelect({ base, college, hint = false, onChange }: { base: string; college: CollegeKey | null; hint?: boolean; onChange?: () => void }) {
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  return (
+    <div className="min-w-0 max-w-full">
+      <label className="flex min-w-0 max-w-full flex-col gap-2 lg:flex-row lg:items-center">
+        <span className="shrink-0 text-[13px] font-semibold text-ink-3">发布学院</span>
+        <Select
+          aria-label="发布学院"
+          aria-describedby={hint ? "college-filter-hint" : undefined}
+          value={college ?? ""}
+          className="min-w-0 max-w-full lg:w-72 [&_select]:min-w-0 [&_select]:truncate"
+          onChange={(event) => {
+            void navigate(hrefWith(base, params, { college: event.currentTarget.value || null }));
+            onChange?.();
+          }}
+        >
+          <option value="">全部单位（含校级）</option>
+          {COLLEGES.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}
+        </Select>
+      </label>
+      {hint && <p id="college-filter-hint" className="mt-2 text-[12px] leading-relaxed text-ink-4">按发文学院归属筛选，可叠加事项与受众；通知是否限本院请以正文为准。</p>}
+    </div>
+  );
+}
+
 /**
  * The phone bar of 精选 and 全部: the brand, the 精选 | 全部 switch (a filter in use carries over), and
  * buttons for the filter sheet and search.
  */
-export function FeedBar({ base, category, channel }: { base: "/" | "/all"; category: CategoryKey | null; channel: ChannelKey }) {
+export function FeedBar({ base, category, channel, college }: { base: "/" | "/all"; category: CategoryKey | null; channel: ChannelKey; college: CollegeKey | null }) {
   const [params] = useSearchParams();
   const [sheet, setSheet] = useState(false);
-  const scope = (to: string) => hrefWith(to, params, { q: null, tab: null, search: null });
-  const filtered = filterKey(category, channel) !== "all";
+  const scope = (to: string) => hrefWith(to, params, { search: null });
+  const filtered = filterKey(category, channel) !== "all" || !!college || !!params.get("tag")?.trim();
   return (
     <>
       <PhoneBar
@@ -94,8 +124,13 @@ export function FeedBar({ base, category, channel }: { base: "/" | "/all"; categ
 /** Phones: the filter as a sheet of options, the one in use ticked; choosing one applies it. */
 function FilterSheet({ open, onClose, base, active }: { open: boolean; onClose: () => void; base: string; active: string }) {
   const [params] = useSearchParams();
+  const tag = params.get("tag")?.trim() || null;
+  const audience = TOPIC_TAGS.find((t) => t === tag) ?? null;
   return (
     <Sheet open={open} onClose={onClose} title="筛选">
+      <section className="mx-4 mb-5 min-w-0">
+        <CollegeSelect base={base} college={readFilters(params).college} hint onChange={onClose} />
+      </section>
       <ul className="mx-4 divide-y divide-line-soft">
         {filterOptions(base, params, "不限").map((o) => {
           const on = o.key === active;
@@ -114,27 +149,55 @@ function FilterSheet({ open, onClose, base, active }: { open: boolean; onClose: 
           );
         })}
       </ul>
+      <section className="mx-4 mt-5" aria-labelledby="audience-filter-label">
+        <h2 id="audience-filter-label" className="px-2 text-[13px] font-semibold text-ink-3">面向受众</h2>
+        <ul className="mt-2 divide-y divide-line-soft">
+          {[null, ...TOPIC_TAGS].map((t) => {
+            const on = t === audience;
+            return (
+              <li key={t ?? "all"}>
+                <Link
+                  to={hrefWith(base, params, { tag: t === null ? (audience ? null : tag) : on ? null : t })}
+                  onClick={onClose}
+                  aria-current={on ? "true" : undefined}
+                  className={`-mx-2 rounded-tile px-2 ${sheetChoice(on)}`}
+                >
+                  {t ?? "不限受众"}
+                  {on && <ChoiceTick />}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
     </Sheet>
   );
 }
 
 /** Phones: the filter and tag in use as chips under the bar; each one clears itself when tapped. */
-export function ActiveFilters({ base, category, channel, tag }: { base: string; category: CategoryKey | null; channel: ChannelKey; tag: string | null }) {
+export function ActiveFilters({ base, category, channel, college, tag }: { base: string; category: CategoryKey | null; channel: ChannelKey; college: CollegeKey | null; tag: string | null }) {
   const [params] = useSearchParams();
   const label = channel === "firstParty" ? CHANNEL_LABELS.firstParty : category ? CATEGORY_LABELS[category] : null;
-  if (!label && !tag) return null;
+  const audience = TOPIC_TAGS.some((t) => t === tag);
+  if (!label && !college && !tag) return null;
   const chip = "inline-flex min-h-11 max-w-full items-center gap-1 rounded-full bg-accent-soft pl-3 pr-2 text-[13px] font-medium text-accent transition-opacity active:opacity-60";
   return (
     <div className="flex flex-wrap gap-2 pb-3 pt-1 lg:hidden">
       {label && (
         <Link to={hrefWith(base, params, { category: null, channel: null })} aria-label={`取消筛选：${label}`} className={chip}>
-          只看{label}
-          <IconClose size={14} strokeWidth={2} />
+          <span className="truncate">只看{label}</span>
+          <IconClose size={14} strokeWidth={2} className="shrink-0" />
+        </Link>
+      )}
+      {college && (
+        <Link to={hrefWith(base, params, { college: null })} aria-label={`取消发布学院筛选：${COLLEGE_LABELS[college]}`} className={chip}>
+          <span className="truncate">发自{COLLEGE_LABELS[college]}</span>
+          <IconClose size={14} strokeWidth={2} className="shrink-0" />
         </Link>
       )}
       {tag && (
-        <Link to={hrefWith(base, params, { tag: null })} aria-label={`取消标签：${tag}`} className={chip}>
-          <span className="truncate">#{tag}</span>
+        <Link to={hrefWith(base, params, { tag: null })} aria-label={audience ? `取消受众：${tag}` : `取消标签：${tag}`} className={chip}>
+          <span className="truncate">{audience ? `只看${tag}` : `#${tag}`}</span>
           <IconClose size={14} strokeWidth={2} className="shrink-0" />
         </Link>
       )}
@@ -166,19 +229,45 @@ function useSlashFocus(ref: React.RefObject<HTMLInputElement | null>) {
 
 /** Desktop search field (GET /all?q=…): at the end of the filter row as the same grey track, at the height of md tabs, with a "/" hint. */
 export function SearchField({ defaultValue = "", keep = {} }: { defaultValue?: string; keep?: Record<string, string | null> }) {
+  const [params] = useSearchParams();
   const [value, setValue] = useState(defaultValue);
   const navigation = useNavigation();
+  const navigate = useNavigate();
+  const location = useLocation();
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => setValue(defaultValue), [defaultValue]);
   useSlashFocus(inputRef);
   const searching = navigation.state === "loading" && navigation.location?.pathname === "/all" && !!new URLSearchParams(navigation.location.search).get("q");
-  const hidden = Object.entries(keep).map(([k, v]) => (v ? <input key={k} type="hidden" name={k} value={v} /> : null));
+  const hidden = Object.entries({
+    ...Object.fromEntries(["category", "channel", "college", "tag", "tab"].map((k) => [k, params.get(k)])),
+    ...keep,
+  }).map(([k, v]) => (v ? <input key={k} type="hidden" name={k} value={v} /> : null));
+  const clearSearch = () => {
+    setValue("");
+    if (params.get("q")) {
+      navigate(hrefWith(location.pathname || "/all", params, { q: null, search: null, tab: null }));
+    } else {
+      inputRef.current?.focus();
+    }
+  };
+
 
   return (
-    <Form method="get" action="/all" role="search" className="group relative w-full shrink-0 lg:w-60">
+    <Form
+      method="get"
+      action="/all"
+      role="search"
+      className="group relative w-full shrink-0 lg:w-60"
+      onSubmit={(e) => {
+        if (!value.trim()) {
+          e.preventDefault();
+          clearSearch();
+        }
+      }}
+    >
       {hidden}
       <label htmlFor="site-search" className="sr-only">
-        搜索标题、摘要与正文
+        搜索全站动态（标题、来源、摘要及正文）
       </label>
       <IconSearch size={16} className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${searching ? "text-accent" : "text-ink-4 group-focus-within:text-ink-3"}`} />
       <input
@@ -187,7 +276,12 @@ export function SearchField({ defaultValue = "", keep = {} }: { defaultValue?: s
         name="q"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="搜索标题、摘要…"
+        onBlur={() => {
+          if (params.get("q") && !value.trim()) {
+            clearSearch();
+          }
+        }}
+        placeholder="搜索标题、来源、摘要…"
         maxLength={200}
         autoComplete="off"
         className="h-[42px] w-full rounded-full bg-well pl-10 pr-10 text-[14px] text-ink outline-none ring-1 ring-inset ring-line-soft transition-[background-color,box-shadow] placeholder:text-ink-4 hover:ring-line-strong focus:bg-surface focus:shadow-[0_0_0_3px_var(--accent-soft)] focus:ring-accent"
@@ -196,10 +290,7 @@ export function SearchField({ defaultValue = "", keep = {} }: { defaultValue?: s
         <button
           type="button"
           aria-label="清空"
-          onClick={() => {
-            setValue("");
-            inputRef.current?.focus();
-          }}
+          onClick={clearSearch}
           className="absolute right-3 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-full text-ink-4 transition-colors hover:bg-bg-sunk hover:text-ink"
         >
           <IconClose size={13} />

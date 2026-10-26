@@ -38,11 +38,11 @@ after(async () => {
 
 let n = 0;
 /** A selected article with full text and a summary, found and published a minute ago: a rolling window that ends at the reader's clock holds it. */
-async function article(): Promise<string> {
+async function article(sourceId = SOURCE): Promise<string> {
   n += 1;
   const minuteAgo = new Date(Date.now() - 60_000);
   const { articleId } = await upsertMaterial({
-    sourceId: SOURCE, url: `https://example.com/${T}-${n}`, title: `Test ${n}`, bodyText: BODY, bodyHtml: `<p>${BODY}</p>`, bodyStatus: "ok", via: "fetch", publishedAt: minuteAgo, discoveredAt: minuteAgo,
+    sourceId, url: `https://example.com/${T}-${n}`, title: `Test ${n}`, bodyText: BODY, bodyHtml: `<p>${BODY}</p>`, bodyStatus: "ok", via: "fetch", publishedAt: minuteAgo, discoveredAt: minuteAgo,
   });
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, reason_zh, score, selected)
             VALUES (${articleId}, 1, 'rule', 'pass', 'ai-models', ${`标题${n}-${T}`}, ${`SUMMARY-${n}-${T}`}, '理由', 90, true)`;
@@ -486,6 +486,7 @@ test("a cached share-image validator never outlives the selected verdict or a wi
 test("summary-only detail and sharing keep neutral metadata without a selected verdict", async () => {
   const id = await article();
   await storyFor(id);
+  await sql`UPDATE articles SET raw=${sql.json({ attachments: [{ name: "Restricted material", url: "https://files.example/restricted.pdf" }] })} WHERE id=${id}`;
   await publishArticle(id, released());
   const before = JSON.parse((await get(`/api/site/items/${id}`)).body);
   assert.equal(before.selected, true);
@@ -498,6 +499,7 @@ test("summary-only detail and sharing keep neutral metadata without a selected v
     assert.equal(item.links.original, before.links.original);
     assert.equal(item.selected, false);
     for (const field of ["score", "reason", "category", "story", "body", "x"]) assert.equal(item[field], null, field);
+    assert.deepEqual(item.attachments, []);
     assert.deepEqual(item.tags, []);
     assert.deepEqual(item.topics, []);
     assert.equal(item.markdownAvailable, false);
@@ -592,4 +594,46 @@ test("a correction between snapshot pages arrives through changes after the fixe
   assert.deepEqual(JSON.parse(changes.body).changes.map((change: { op: string; item: { id: string; title: string } }) =>
     ({ op: change.op, id: change.item.id, title: change.item.title })), [{ op: 'upsert', id, title }],
   'the client applies the correction once after finishing the original snapshot');
+});
+
+test("public summary licences expose safe material references but never the unlicensed body or raw payload", async () => {
+  const summarySource = `${SOURCE}-summary-links`;
+  await sql`INSERT INTO sources(id,name,kind,participation_mode,next_fetch_at) VALUES (${summarySource},'Summary licence','rss','editorial','2100-01-01')`;
+  const id = await article(summarySource);
+  const safe = [{ name: "申请表", url: "https://official.example/form.docx?token=Keep%2FMe&order=2" }];
+  await sql`UPDATE articles SET raw=${sql.json({ privatePayload: "RAW-SECRET", attachments: [
+    ...safe, safe[0], { name: "loopback", url: "http://127.0.0.1/a.pdf" },
+    { name: "credentials", url: "https://user:pass@official.example/a.pdf" }, { name: "script", url: "javascript:alert(1)" }
+  ] })} WHERE id=${id}`;
+  await publishArticle(id, released());
+  for (const suffix of ["", "/original"]) {
+    const response = await get(`/api/site/items/${id}${suffix}`);
+    assert.equal(response.status, 200);
+    const detail = JSON.parse(response.body);
+    assert.equal(detail.body, null);
+    assert.deepEqual(detail.attachments, safe);
+    assert.equal(response.body.includes("RAW-SECRET"), false);
+    assert.equal(response.body.includes(BODY.trim()), false);
+  }
+  const markdown = await get(`/items/${id}/markdown`);
+  assert.equal(markdown.status, 200);
+  assert.ok(markdown.body.includes(safe[0]!.url));
+  assert.equal(markdown.body.includes(BODY.trim()), false);
+  await setVisibility(id, { visibility: "withdrawn", reason: "withdraw attachment reference", version: 0 }, "test");
+  assert.equal((await get(`/api/site/items/${id}`)).status, 404);
+  assert.equal((await get(`/items/${id}/markdown`)).status, 404);
+});
+
+test("legacy body references remain readable without granting full text or guessing missing links", async () => {
+  const id = await article();
+  await sql`UPDATE articles SET raw=NULL,body_html=NULL,body_text='附件下载：https://official.example/legacy.pdf?signature=A%2FB' WHERE id=${id}`;
+  await publishArticle(id, released());
+  await sql`UPDATE publications SET body_mode='summary' WHERE article_id=${id}`;
+  const load = async () => JSON.parse((await get(`/api/site/items/${id}`)).body);
+  assert.deepEqual((await load()).attachments, [{ name: "https://official.example/legacy.pdf?signature=A%2FB", url: "https://official.example/legacy.pdf?signature=A%2FB" }]);
+  assert.equal((await load()).body, null);
+  await sql`UPDATE articles SET raw='{"attachments":[]}'::jsonb WHERE id=${id}`;
+  assert.deepEqual((await load()).attachments, [], "a newer explicit empty observation supersedes old prose links");
+  await sql`UPDATE articles SET raw=NULL,body_text='附件见原文' WHERE id=${id}`;
+  assert.deepEqual((await load()).attachments, []);
 });

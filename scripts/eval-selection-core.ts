@@ -1,6 +1,7 @@
 // Selection evaluation cases (one human gold decision per line) and their metrics. Whether a case is
 // selected is the site's own rule (editorial/analyze.ts), never a copy of it.
 import { z } from "zod";
+import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
 import { scoresSelect, type AnalysisRun } from "@aihot/backend/editorial/analyze";
 import { binaryMetrics, nonEmpty, nullableString, parseCasesJsonl, round, SamplingContext } from "./eval-tools.ts";
 
@@ -32,6 +33,54 @@ export type SelectionGoldRow = z.infer<typeof GoldRow>;
 
 /** Validate the entire gold set before filtering or sending any model requests. */
 export const parseSelectionGoldJsonl = (text: string): SelectionGoldRow[] => parseCasesJsonl(text, GoldRow);
+
+/**
+ * Preparation inventory for the entire validated file, not an evaluation sample. A category key used
+ * explicitly as a sampling stratum is coverage evidence only, not a verified category annotation.
+ * Non-empty body text likewise says nothing about whether the original article is complete.
+ */
+export function selectionGoldPreparation(rows: readonly SelectionGoldRow[]) {
+  const sources = new Map<string, { sourceName: string; sourceKind: string; count: number }>();
+  const splits = new Map<string | null, number>();
+  const strata = new Map<string | null, number>();
+  const missingBodyTextCaseIds: string[] = [];
+  for (const row of rows) {
+    const sourceName = row.material.sourceName;
+    const sourceKind = row.sourceFacts.sourceKind;
+    const sourceKey = JSON.stringify([sourceName, sourceKind]);
+    const source = sources.get(sourceKey);
+    if (source) source.count++;
+    else sources.set(sourceKey, { sourceName, sourceKind, count: 1 });
+    const split = row.samplingContext?.benchmarkSplit ?? null;
+    splits.set(split, (splits.get(split) ?? 0) + 1);
+    const stratum = row.samplingContext?.samplingStratum ?? null;
+    strata.set(stratum, (strata.get(stratum) ?? 0) + 1);
+    if (!row.material.bodyOriginal?.trim() && !row.material.bodyZh?.trim()) {
+      missingBodyTextCaseIds.push(row.caseId);
+    }
+  }
+  return {
+    total: rows.length,
+    sourceDistribution: [...sources.values()],
+    benchmarkSplitDistribution: [...splits].map(([benchmarkSplit, count]) => ({ benchmarkSplit, count })),
+    samplingStratumDistribution: [...strata].map(([samplingStratum, count]) => ({ samplingStratum, count })),
+    bodyText: {
+      withTextCount: rows.length - missingBodyTextCaseIds.length,
+      missingTextCaseIds: missingBodyTextCaseIds,
+      completeness: "not_verified",
+    },
+    categoryStratumCoverage: {
+      basis: "exact_category_key_sampling_stratum_only",
+      counts: CATEGORY_KEYS.map((categoryKey) => ({ categoryKey, count: strata.get(categoryKey) ?? 0 })),
+      covered: CATEGORY_KEYS.filter((key) => strata.has(key)),
+      uncovered: CATEGORY_KEYS.filter((key) => !strata.has(key)),
+      nonCategoryStrata: [...strata].flatMap(([samplingStratum, count]) =>
+        samplingStratum !== null && !(CATEGORY_KEYS as readonly string[]).includes(samplingStratum) ? [{ samplingStratum, count }] : []),
+      unlabelledCount: strata.get(null) ?? 0,
+      categoryAnnotations: "not_provided_by_gold_schema",
+    },
+  };
+}
 
 export interface SelectionMetricCase {
   gold: SelectionGoldDecision;

@@ -10,7 +10,7 @@ import { enqueue, QUEUES, shutdownSignal } from "../jobs/queue.ts";
 import { queueProcessing } from "../jobs/content.ts";
 import { BudgetExceededError, completeReceipt } from "../providers/receipts.ts";
 import { fetchRss } from "./rss.ts";
-import { fetchDetail, fetchWebList, isCallToActionTitle, needsTitle, type DetailNeed } from "./web-list.ts";
+import { fetchDetail, fetchWebList, isCallToActionTitle, needsTitle, type DetailNeed, type DetailResult } from "./web-list.ts";
 import { unsupportedConfig } from "./config-keys.ts";
 import { admitListing, filterPublicationWindow } from "./filters.ts";
 import { fetchJsonList } from "./json-list.ts";
@@ -143,10 +143,14 @@ function detailNeed(c: CollectionCandidate, stored: StoredDetail | undefined, so
 }
 
 /** A detail page's findings. A body comes from the same Readability path as extraction, using bytes already fetched. */
-function applyDetail(c: CollectionCandidate, got: Awaited<ReturnType<typeof fetchDetail>>, rules: string): void {
+function applyDetail(c: CollectionCandidate, got: DetailResult, rules: string): void {
   c.detailRules = rules;
   if (got.title) c.title = got.title;
   if (got.summary) c.excerpt = got.summary;
+  if (got.attachments !== null) c.raw = {
+    ...(c.raw && typeof c.raw === "object" && !Array.isArray(c.raw) ? c.raw : {}),
+    attachments: got.attachments,
+  };
   // A confirmed body enters through normal material revisions and skips the redundant fetch job.
   if (got.body) {
     c.bodyHtml = got.body.html;

@@ -4,6 +4,8 @@
 // decision. A threshold sweep shows what another threshold would have done. The gold file has one case
 // per line as eval-selection-core.ts describes; lines starting with // are skipped.
 // Usage: node --env-file=.env scripts/eval-selection.ts [--gold .data/gold.jsonl] [--models default,deepseek-flash] [--n 200] [--split all] [--label "..."]
+// Offline preparation inventory (no env file, database, model calls, report files or SelectBench import):
+// node scripts/eval-selection.ts --check-only --gold .data/gold.jsonl
 // Receipts make re-runs free; "either" cases are excluded from decisive metrics. Each run is also
 // imported into SelectBench (admin → SelectBench) with every case, unless --no-import is given.
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -11,22 +13,9 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { DEPLOYMENT } from "@aihot/site";
 import { REPO_ROOT } from "@aihot/backend/config";
-import { closeDb } from "@aihot/backend/db";
-import {
-  SELECTION_PROMPT_VERSION,
-  awaitsMaterial,
-  buildScoreInput,
-  runSelectionPrefilter,
-  runSelectionScores,
-  scoresSelect,
-  shownScore,
-  tierThreshold,
-  type AnalysisRun,
-  type AnalyzeInputArticle,
-} from "@aihot/backend/editorial/analyze";
-import { importSelectBenchRun } from "@aihot/backend/admin/selectbench";
-import { evalModels, pmap, positiveInt, safeReportNamePart, sampleCases, usageFor } from "./eval-tools.ts";
-import { parseSelectionGoldJsonl, selectionMetrics, selectionThresholdMetrics, type SelectionDecision, type SelectionGoldRow } from "./eval-selection-core.ts";
+import type { AnalysisRun, AnalyzeInputArticle } from "@aihot/backend/editorial/analyze";
+import { parseSelectionGoldJsonl, selectionGoldPreparation, selectionMetrics, selectionThresholdMetrics } from "./eval-selection-core.ts";
+import type { SelectionDecision, SelectionGoldRow } from "./eval-selection-core.ts";
 
 // Without options: the site's gold set (site.ts DEPLOYMENT.selectionGold), else the whole of .data/gold.jsonl
 // (up to 200 cases), swept over a wide range of thresholds.
@@ -45,10 +34,31 @@ const { values } = parseArgs({
     seed: { type: "string", default: "7" },
     label: { type: "string" },
     "no-import": { type: "boolean", default: false },
+    "check-only": { type: "boolean", default: false },
   },
 });
 
 const rows = parseSelectionGoldJsonl(readFileSync(path.resolve(REPO_ROOT, values.gold!), "utf8"));
+if (values["check-only"]) {
+  console.log(JSON.stringify(selectionGoldPreparation(rows), null, 2));
+  process.exit(0);
+}
+
+// Static SelectBench imports cannot enforce the offline boundary: --check-only must exit before
+// importing SelectBench or invoking the evaluation runtime, regardless of model or sample options.
+const { closeDb } = await import("@aihot/backend/db");
+const {
+  SELECTION_PROMPT_VERSION,
+  awaitsMaterial,
+  buildScoreInput,
+  runSelectionPrefilter,
+  runSelectionScores,
+  scoresSelect,
+  shownScore,
+  tierThreshold,
+} = await import("@aihot/backend/editorial/analyze");
+const { importSelectBenchRun } = await import("@aihot/backend/admin/selectbench");
+const { evalModels, pmap, positiveInt, safeReportNamePart, sampleCases, usageFor } = await import("./eval-tools.ts");
 const sample = sampleCases(rows, { split: values.split!, n: positiveInt(values.n!, "n"), seed: Number(values.seed) });
 const concurrency = positiveInt(values.concurrency!, "concurrency");
 

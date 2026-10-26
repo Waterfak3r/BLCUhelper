@@ -25,6 +25,1075 @@
       "interval_minutes": 120,
       "site_fulltext": false,
       "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-yjsy-notices",
+      "name": "北京语言大学研究生院·通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://yjsy.blcu.edu.cn/xwgg1/tzgg.htm",
+        "parseMode": "html",
+        "itemSelector": ".list ul li",
+        "linkSelector": "a",
+        "titleSelector": "p",
+        "publishedAtSelector": "span",
+        "allowUrlPrefixes": ["https://yjsy.blcu.edu.cn/info/1048/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".art-tit h3",
+          "publishedAtSelector": ".art-tit p span:nth-child(2)",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-exchange-programs",
+      "name": "北京语言大学国际合作与交流处·选派通知",
+      "kind": "web_list",
+      "config": {
+        "url": "https://exchange.blcu.edu.cn/xsjsjl/xptz.htm",
+        "parseMode": "html",
+        "itemSelector": ".right_box ul li",
+        "linkSelector": "a",
+        "titleSelector": "a",
+        "publishedAtSelector": "span",
+        "allowUrlPrefixes": ["https://exchange.blcu.edu.cn/info/1090/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".con_tit",
+          "publishedAtSelector": ".con_wz",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-jobs-notices",
+      "name": "北京语言大学就业创业指导中心·通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://jobs.blcu.edu.cn/front/channel.jspa?channelId=743",
+        "parseMode": "html",
+        "itemSelector": "ul.list-content li",
+        "linkSelector": "a",
+        "titleSelector": "a",
+        "publishedAtSelector": "span.pull-left",
+        "allowUrlPrefixes": ["https://jobs.blcu.edu.cn/front/showContent.jspa?channelId=743"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".content_title",
+          "publishedAtSelector": ".content_time span:first-of-type",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-xsc-notices",
+      "name": "北京语言大学党委学生工作部·通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://xsc.blcu.edu.cn/xwdt1/tzgg.htm",
+        "parseMode": "html",
+        "itemSelector": "li[id^=\"line_u5_\"]",
+        "linkSelector": ".conts h3 a",
+        "titleSelector": ".conts h3 a",
+        "publishedAtSelector": ".time",
+        "allowUrlPrefixes": ["https://xsc.blcu.edu.cn/info/1081/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".newsContent h1",
+          "publishedAtSelector": ".newsContent .info span:first-child",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-seis-notices",
+      "name": "北京语言大学英语和高级翻译学院·通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://seis.blcu.edu.cn/xwgg/tzgg.htm",
+        "parseMode": "html",
+        "itemSelector": ".text-list ul li",
+        "linkSelector": "a",
+        "titleSelector": ".text-linfo h3",
+        "publishedAtSelector": ".text-ldata",
+        "allowUrlPrefixes": ["https://seis.blcu.edu.cn/info/1251/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".art-tit h3",
+          "publishedAtSelector": ".art-tit p span:first-child",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-bs-notices",
+      "name": "北京语言大学商学院·通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://bs.blcu.edu.cn/xwgg/tzgg.htm",
+        "parseMode": "html",
+        "itemSelector": ".tzgg ul li",
+        "linkSelector": "h3 a",
+        "titleSelector": "h3 a",
+        "publishedAtSelector": "span",
+        "allowUrlPrefixes": ["https://bs.blcu.edu.cn/info/1031/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".content h1",
+          "publishedAtSelector": ".content-t span:first-child",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-chinastudies-notices",
+      "name": "北京语言大学汉学与中国学学院·通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://chinastudies.blcu.edu.cn/xwgg_News___Bulletin/tzgg_Announcement.htm",
+        "parseMode": "html",
+        "itemSelector": ".ej_list li.clearfloat",
+        "linkSelector": ".list_tijzy a",
+        "titleSelector": ".list_tijzy a",
+        "publishedAtSelector": ".list_ljgd a",
+        "allowUrlPrefixes": ["https://chinastudies.blcu.edu.cn/info/1050/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".content_ys .bt",
+          "publishedAtSelector": ".djs_rq span:nth-child(2)",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-get-lectures",
+      "name": "北京语言大学汉学与中国学学院（一带一路研究院）·讲座预告",
+      "kind": "web_list",
+      "config": {
+        "url": "http://get.blcu.edu.cn/xwgg/jzyg.htm",
+        "parseMode": "html",
+        "itemSelector": ".n_right ul.list > li",
+        "linkSelector": "a",
+        "titleSelector": "a",
+        "publishedAtSelector": "a span",
+        "allowUrlPrefixes": ["http://get.blcu.edu.cn/info/1092/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".contain_con h2",
+          "publishedAtSelector": ".contain_con > span",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-cics-notices",
+      "name": "北京语言大学国际中文学院·通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://cics.blcu.edu.cn/xwgg/tzgg.htm",
+        "parseMode": "html",
+        "itemSelector": ".newlist ul > li.cl",
+        "linkSelector": "a.title",
+        "titleSelector": "a.title",
+        "publishedAtSelector": "a.date",
+        "allowUrlPrefixes": ["https://cics.blcu.edu.cn/info/1018/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".textbox form .title",
+          "publishedAtSelector": ".dataname > a:first-child",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-cics-lectures",
+      "name": "北京语言大学国际中文学院·讲座预告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://cics.blcu.edu.cn/xwgg/jzyg.htm",
+        "parseMode": "html",
+        "itemSelector": ".newlist ul > li.cl",
+        "linkSelector": "a.title",
+        "titleSelector": "a.title",
+        "publishedAtSelector": "a.date",
+        "allowUrlPrefixes": ["https://cics.blcu.edu.cn/info/1019/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".textbox form .title",
+          "publishedAtSelector": ".dataname > a:first-child",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-yyzw-notices",
+      "name": "北京语言大学应用中文学院·通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://yyzw.blcu.edu.cn/xwgg1/tzgg.htm",
+        "parseMode": "html",
+        "itemSelector": ".textbox > ul > li",
+        "linkSelector": "a",
+        "titleSelector": "a",
+        "publishedAtSelector": "span",
+        "allowUrlPrefixes": ["https://yyzw.blcu.edu.cn/info/1014/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".textbox form .title",
+          "publishedAtSelector": ".dataname > a:first-child",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-sjc-notices",
+      "name": "北京语言大学国际政治与传播学院·通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "http://sjc.blcu.edu.cn/tzgg.htm",
+        "parseMode": "html",
+        "itemSelector": ".xynewsbox .news",
+        "linkSelector": ".newstitle a",
+        "titleSelector": ".newstitle a",
+        "publishedAtSelector": ".newdate",
+        "allowUrlPrefixes": [
+          "http://sjc.blcu.edu.cn/info/1128/",
+          "http://sjc.blcu.edu.cn/info/1241/"
+        ],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": "form[name=\"_newscontent_fromname\"] > .title",
+          "publishedAtSelector": ".zuozhe > div",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-xxkx-notices",
+      "name": "北京语言大学信息科学学院·院内公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://xxkx.blcu.edu.cn/xwdt/yngg.htm",
+        "parseMode": "html",
+        "itemSelector": ".newslist li[id^=\"line_u7_\"]",
+        "linkSelector": ".conts h3 a",
+        "titleSelector": ".conts h3 a",
+        "allowUrlPrefixes": ["https://xxkx.blcu.edu.cn/info/1003/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".newsContent h1",
+          "publishedAtSelector": ".newsContent .info span:first-child",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-sllr-notices",
+      "name": "北京语言大学语言科学与资源学院（语言科学研究院）·通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://sllr.blcu.edu.cn/xwgg/tzgg.htm",
+        "parseMode": "html",
+        "itemSelector": ".nr_both a:has(.tit3)",
+        "linkSelector": "a",
+        "titleSelector": ".tit3",
+        "publishedAtSelector": ".fbdate",
+        "allowUrlPrefixes": ["https://sllr.blcu.edu.cn/info/1141/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".nr_both h3",
+          "publishedAtRegex": "日期[：:]\\s*(\\d{4}-\\d{2}-\\d{2})",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-xlrzkx-notices",
+      "name": "北京语言大学心理与认知科学学院（生命健康研究院）·通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://xlrzkx.blcu.edu.cn/xwgg/tzgg.htm",
+        "parseMode": "html",
+        "itemSelector": ".lm_list ul li",
+        "linkSelector": "a",
+        "titleSelector": "a",
+        "publishedAtSelector": "span",
+        "allowUrlPrefixes": ["https://xlrzkx.blcu.edu.cn/info/1090/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".c-content .c-title",
+          "publishedAtSelector": ".c-content .other-s",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-xlrzkx-admissions",
+      "name": "北京语言大学心理与认知科学学院（生命健康研究院）·学院招生",
+      "kind": "web_list",
+      "config": {
+        "url": "https://xlrzkx.blcu.edu.cn/xyzs1.htm",
+        "parseMode": "html",
+        "itemSelector": ".lm_list ul li",
+        "linkSelector": "a",
+        "titleSelector": "a",
+        "publishedAtSelector": "span",
+        "allowUrlPrefixes": ["https://xlrzkx.blcu.edu.cn/info/1116/", "https://xlrzkx.blcu.edu.cn/info/1117/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".c-content .c-title",
+          "publishedAtSelector": ".c-content .other-s",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-xlrzkx-student-activities",
+      "name": "北京语言大学心理与认知科学学院（生命健康研究院）·团学活动",
+      "kind": "web_list",
+      "config": {
+        "url": "https://xlrzkx.blcu.edu.cn/txhd.htm",
+        "parseMode": "html",
+        "itemSelector": ".lm_list ul li",
+        "linkSelector": "a",
+        "titleSelector": "a",
+        "publishedAtSelector": "span",
+        "allowUrlPrefixes": ["https://xlrzkx.blcu.edu.cn/info/1119/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".c-content .c-title",
+          "publishedAtSelector": ".c-content .other-s",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-marxism-notices",
+      "name": "北京语言大学马克思主义学院·通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://marxism.blcu.edu.cn/xwdt/tzgg.htm",
+        "parseMode": "html",
+        "itemSelector": "ul.ss > li",
+        "linkSelector": "a",
+        "titleSelector": "a",
+        "publishedAtSelector": "span",
+        "allowUrlPrefixes": ["https://marxism.blcu.edu.cn/info/1054/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".title h3",
+          "publishedAtSelector": ".title em:nth-child(2)",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-soe-notices",
+      "name": "北京语言大学教育学院·通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://soe.blcu.edu.cn/xwgg/tzgg.htm",
+        "parseMode": "html",
+        "itemSelector": "tr[id^='line_u6_']",
+        "linkSelector": "a",
+        "titleSelector": "a",
+        "publishedAtSelector": "td.bt_date",
+        "allowUrlPrefixes": ["https://soe.blcu.edu.cn/info/1131/"],
+        "detail": {
+          "maxFetches": 8,
+          "publishedAtSelector": "td[style='font-size:9pt;'] > span:first-child",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-ysh-notices",
+      "name": "北京语言大学艺术学院·通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://ysh.blcu.edu.cn/xwgg_News___Bulletin/tzgg.htm",
+        "parseMode": "html",
+        "itemSelector": "ul.ej_list1 > li",
+        "linkSelector": ".list_tijzy a",
+        "titleSelector": ".list_tijzy a",
+        "publishedAtSelector": ".list_ljgd a",
+        "allowUrlPrefixes": ["https://ysh.blcu.edu.cn/info/1113/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".bt",
+          "publishedAtSelector": ".djs_rq span:first-child",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-tyb-notices",
+      "name": "北京语言大学体育教学部·通知与竞赛规程",
+      "kind": "web_list",
+      "config": {
+        "url": "https://tyb.blcu.edu.cn/tzgg.htm",
+        "parseMode": "html",
+        "itemSelector": "li:has(> a[href*='info/1074/'])",
+        "linkSelector": "a",
+        "titleSelector": "a",
+        "allowUrlPrefixes": ["https://tyb.blcu.edu.cn/info/1074/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".conth1",
+          "publishedAtSelector": ".conthsj",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-cec-notices",
+      "name": "北京语言大学继续教育学院·信息公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://cec.blcu.edu.cn/xwdt/xxgg.htm",
+        "parseMode": "html",
+        "itemSelector": "li.v-c-list-li",
+        "linkSelector": ".v-c-list-content-text a",
+        "titleSelector": ".v-c-list-content-text-t1",
+        "allowUrlPrefixes": ["https://cec.blcu.edu.cn/info/1042/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".v-c-l-title",
+          "publishedAtSelector": ".dataname a:first-child",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": {"initialBackfillLimit": 8}
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-ic-notices",
+      "name": "北京语言大学国际学院·通知公告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://ic.blcu.edu.cn/xydt/tzgg.htm",
+        "parseMode": "html",
+        "itemSelector": ".textbox ul li",
+        "linkSelector": "a",
+        "titleSelector": "a",
+        "publishedAtSelector": "span",
+        "allowUrlPrefixes": ["https://ic.blcu.edu.cn/info/1019/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".bigtitle",
+          "publishedAtSelector": ".dataname a:first-child",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": {"initialBackfillLimit": 8}
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-lacic-lectures",
+      "name": "北京语言大学语言文化国际传播联合研究院·讲座预告",
+      "kind": "web_list",
+      "config": {
+        "url": "https://lacic.blcu.edu.cn/xydt_News___Events/jzyg_Upcoming_Lectures.htm",
+        "parseMode": "html",
+        "itemSelector": ".ej_list1 > li",
+        "linkSelector": ".list_tijzy a",
+        "titleSelector": ".list_tijzy a",
+        "publishedAtSelector": ".list_ljgd a",
+        "allowUrlPrefixes": ["https://lacic.blcu.edu.cn/info/1113/"],
+        "detail": {
+          "maxFetches": 8,
+          "titleSelector": ".content_ys .bt",
+          "publishedAtSelector": ".djs_rq span:nth-child(2)",
+          "publishedAtAuthoritative": true
+        },
+        "_aihot": {"initialBackfillLimit": 8}
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-jiaowu-rss",
+      "name": "北京语言大学·北语教务（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E6%95%99%E5%8A%A1?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-zizhu-rss",
+      "name": "北京语言大学·北语资助与学业发展（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E8%B5%84%E5%8A%A9%E4%B8%8E%E5%AD%A6%E4%B8%9A%E5%8F%91%E5%B1%95?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-houqin-rss",
+      "name": "北京语言大学·北语后勤（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E5%90%8E%E5%8B%A4?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-pingan-rss",
+      "name": "北京语言大学·平安北语（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%B9%B3%E5%AE%89%E5%8C%97%E8%AF%AD?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-xinli-rss",
+      "name": "北京语言大学·心理中心（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E5%BF%83%E7%90%86%E4%B8%AD%E5%BF%83?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-beiyuqingnian-rss",
+      "name": "北京语言大学·北语青年（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E9%9D%92%E5%B9%B4?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1_5",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-xsh-rss",
+      "name": "北京语言大学·校学生会（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E6%A0%A1%E5%AD%A6%E7%94%9F%E4%BC%9A?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1_5",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-yjh-rss",
+      "name": "北京语言大学·校研究生会（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E6%A0%A1%E7%A0%94%E7%A9%B6%E7%94%9F%E4%BC%9A?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1_5",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-shetuan-rss",
+      "name": "北京语言大学·北语社团理事会（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E7%A4%BE%E5%9B%A2%E7%90%86%E4%BA%8B%E4%BC%9A?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1_5",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-zhiyuan-rss",
+      "name": "北京语言大学·北语志愿服务总队（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E5%BF%97%E6%84%BF%E6%9C%8D%E5%8A%A1%E6%80%BB%E9%98%9F?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1_5",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-lib-rss",
+      "name": "北京语言大学·图书馆（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E5%9B%BE%E4%B9%A6%E9%A6%86?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-wenxueyuan-rss",
+      "name": "北京语言大学·文学院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E6%96%87%E5%AD%A6%E9%99%A2?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-bs-rss",
+      "name": "北京语言大学·商学院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E5%95%86%E5%AD%A6%E9%99%A2?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-xxkx-rss",
+      "name": "北京语言大学·信息科学学院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E4%BF%A1%E6%81%AF%E7%A7%91%E5%AD%A6%E5%AD%A6%E9%99%A2?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-seis-rss",
+      "name": "北京语言大学·英语和高级翻译学院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E8%8B%B1%E8%AF%AD%E5%92%8C%E9%AB%98%E7%BA%A7%E7%BF%BB%E8%AF%91%E5%AD%A6%E9%99%A2?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-irs-rss",
+      "name": "北京语言大学·外国语言文化学院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/BLCU%E5%A4%96%E9%99%A2%E7%A0%94%E7%A9%B6%E7%94%9F?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1_5",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-cics-rss",
+      "name": "北京语言大学·国际中文学院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E5%9B%BD%E9%99%85%E4%B8%AD%E6%96%87%E5%AD%A6%E9%99%A2%E7%A0%94%E7%A9%B6%E7%94%9F%E4%BC%9A?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1_5",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-yyzw-rss",
+      "name": "北京语言大学·应用中文学院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E5%BA%94%E7%94%A8%E4%B8%AD%E6%96%87%E5%AD%A6%E9%99%A2?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-chinastudies-rss",
+      "name": "北京语言大学·汉学与中国学学院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E6%B1%89%E5%AD%A6%E4%B8%8E%E4%B8%AD%E5%9B%BD%E5%AD%A6%E5%AD%A6%E9%99%A2?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-get-rss",
+      "name": "北京语言大学·一带一路研究院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E4%B8%80%E5%B8%A6%E4%B8%80%E8%B7%AF%E7%A0%94%E7%A9%B6%E9%99%A2?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-marxism-rss",
+      "name": "北京语言大学·马克思主义学院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E9%A9%AC%E9%99%A2?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-ysh-rss",
+      "name": "北京语言大学·艺术学院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/BLCU%E8%89%BA%E6%9C%AF%E5%AD%A6%E9%99%A2?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-soe-rss",
+      "name": "北京语言大学·教育学院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E6%95%99%E8%82%B2%E5%AD%A6%E9%99%A2?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-sllr-rss",
+      "name": "北京语言大学·语言科学与资源学院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E8%A8%80%E7%A7%91%E9%9D%92%E8%AF%AD?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1_5",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-xlrzkx-rss",
+      "name": "北京语言大学·心理与认知科学学院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E5%BF%83%E7%90%86%E4%B8%8E%E8%AE%A4%E7%9F%A5%E7%A7%91%E5%AD%A6%E5%AD%A6%E9%99%A2?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-icicc-rss",
+      "name": "北京语言大学·中国书法国际传播研究院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E4%B8%AD%E5%9B%BD%E4%B9%A6%E6%B3%95%E5%9B%BD%E9%99%85%E4%BC%A0%E6%92%AD%E7%A0%94%E7%A9%B6%E9%99%A2?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-ic-rss",
+      "name": "北京语言大学·国际学院（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E4%BA%AC%E8%AF%AD%E8%A8%80%E5%A4%A7%E5%AD%A6%E5%9B%BD%E9%99%85%E5%AD%A6%E9%99%A2?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "blcu-tyb-rss",
+      "name": "北京语言大学·体育教学部（微信）",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "http://wechat-mp-tools:5200/api/articles/rss/%E5%8C%97%E8%AF%AD%E4%BD%93%E8%82%B2%E6%95%99%E5%AD%A6%E9%83%A8?limit=20",
+        "_aihot": { "initialBackfillLimit": 8 }
+      },
+      "tier": "T1",
+      "owner_entity_id": "blcu",
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "site_fulltext": false,
+      "syndicate_fulltext": false
     }
   ]
 }

@@ -174,6 +174,13 @@ for (const phone of [false, true]) test(`a kept group is not greyed and its ${ph
     await expect(page.getByText("组内未读报道", { exact: true }).filter({ visible: true })).toBeVisible();
     assert.equal(await greyed("组内未读报道"), false, "an unread report keeps the normal colour");
     assert.equal(await greyed("组内已读报道"), true, "a read report is grey");
+    const report = page.locator("li").filter({ has: page.getByRole("link", { name: "组内未读报道", exact: true }) }).filter({ visible: true }).last();
+    const source = report.getByRole("link", { name: "Fixture", exact: true });
+    await expect(source).toBeVisible();
+    await expect(source).toHaveAttribute("href", "https://example.org/member-2");
+    await expect(source).toHaveAttribute("target", "_blank");
+    await expect(source).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(report.getByRole("link", { name: "组内未读报道", exact: true })).toHaveAttribute("href", "/items/member-2");
   } finally {
     await context.close();
   }
